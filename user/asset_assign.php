@@ -157,7 +157,7 @@ data-gpu="<?= $c['gpu'] ?>">
 <?php endforeach; ?>
 </select>
 
-<input type="text" id="no_pc" name="no_pc" class="form-control mb-2" placeholder="รหัสเครื่อง" readonly>
+<input type="text" id="no_pc" name="no_pc" class="form-control mb-2" placeholder="รหัสเครื่อง..." readonly>
 
 <!-- 🔥 รวม spec -->
 <input type="text" id="spec_full" class="form-control mb-2" placeholder="Spec เครื่อง" readonly>
