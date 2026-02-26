@@ -1,7 +1,7 @@
 ***คำสั่งเคลียร์ฐานข้อมูล เริ่ม int นับ 1 ใหม่***
 DELETE FROM ชื่อฐานข้อมูล;
 DELETE FROM ชื่อฐานข้อมูล;
-
+245
 DBCC CHECKIDENT ('ชื่อฐานข้อมูล', RESEED, 0);
 DBCC CHECKIDENT ('ชื่อฐานข้อมูล', RESEED, 0);
 
