@@ -122,6 +122,61 @@ body{font-family:'Sarabun';font-size:14px;background:#eef6ff;}
     color:#0d6efd;
     margin-bottom:4px;
 }
+/* ===== NEW REPAIR MODAL STYLE ===== */
+.repair-clean{
+    background:#ffffff;
+    padding:30px;
+    border-radius:12px;
+}
+
+.repair-head{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:20px;
+    padding-bottom:10px;
+    border-bottom:1px solid #e5e7eb;
+}
+
+.repair-grid-clean{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:16px;
+}
+
+.repair-grid-clean .item{
+    background:#f8fafc;
+    padding:15px 18px;
+    border-radius:10px;
+    border:1px solid #e5e7eb;
+}
+
+.repair-grid-clean .full{
+    grid-column:1 / -1;
+}
+
+.repair-grid-clean label{
+    font-size:12px;
+    color:#6b7280;
+    display:block;
+}
+
+.repair-grid-clean .item div{
+    font-size:16px;
+    font-weight:600;
+    color:#111827;
+}
+
+.price{
+    font-size:22px;
+    color:#0d6efd;
+    font-weight:700;
+}
+
+.repair-footer{
+    margin-top:25px;
+    text-align:right;
+}
 </style>
 
 <div class="container mt-4">
@@ -191,12 +246,15 @@ body{font-family:'Sarabun';font-size:14px;background:#eef6ff;}
 
 $spec = $row['spec']." | ".$row['ram']." | ".$row['ssd']." | ".$row['gpu'];
 
-$age = (int)$row['How_long2'];
+$age = $row['How_long2'];
 
-if($age < 4){
+if(empty($row['yfm_2'])){
+    $grade = "<span class='badge bg-secondary'>ยังไม่ได้บันทึกข้อมูล</span>";
+}
+elseif((int)$age < 4){
     $grade = "<span class='badge bg-success'>A - ใช้งานได้ดี</span>";
 }
-elseif($age <= 8){
+elseif((int)$age <= 8){
     $grade = "<span class='badge bg-warning text-dark'>B - พอใช้</span>";
 }
 else{
@@ -362,7 +420,7 @@ else{
 </div>
 </div>
 
-<!-- MODAL REPAIR -->
+<!-- ================= MODAL REPAIR (ใหม่สวยแล้ว) ================= -->
 <div class="modal fade" id="repair<?= $i ?>">
 <div class="modal-dialog modal-lg modal-dialog-centered">
 <div class="modal-content">
@@ -372,40 +430,49 @@ else{
 <button class="btn-close" data-bs-dismiss="modal"></button>
 </div>
 
-<div class="modal-body">
+<div class="modal-body repair-clean">
 
-<div class="detail-grid">
-
-<div class="detail-box">
-<b>รหัสเครื่อง</b>
-<?= $row['no_pc'] ?>
+<div class="repair-head">
+    <div>
+        <h5 class="mb-0"><?= $row['no_pc'] ?></h5>
+        <small class="text-muted"><?= $row['project'] ?></small>
+    </div>
+    <div class="badge bg-primary px-3 py-2">
+        <?= $row['user_employee'] ?>
+    </div>
 </div>
 
-<div class="detail-box">
-<b>ผู้ใช้งาน</b>
-<?= $row['user_employee'] ?>
+<div class="repair-grid-clean">
+
+<div class="item">
+<label>Spec เครื่อง</label>
+<div><?= $spec ?></div>
 </div>
 
-<div class="detail-box">
-<b>Spec เครื่อง</b>
-<?= $spec ?>
+<div class="item">
+<label>วันที่ซื้อ</label>
+<div><?= $row['yfm_2'] ?: '-' ?></div>
 </div>
 
-<div class="detail-box">
-<b>สถานะ</b>
-รอเชื่อม IT_RepairTickets
+<div class="item">
+<label>CPU อายุ</label>
+<div><?= $row['How_long'] ?> ปี</div>
 </div>
 
-<div class="detail-box">
-<b>ค่าใช้จ่าย</b>
--
+<div class="item">
+<label>อายุใช้งาน</label>
+<div><?= $row['How_long2'] ?> ปี</div>
 </div>
 
-<div class="detail-box">
-<b>วันที่ซ่อม</b>
--
+<div class="item full">
+<label>มูลค่าเครื่อง</label>
+<div class="price"><?= number_format($row['machine_value']) ?> บาท</div>
 </div>
 
+</div>
+
+<div class="repair-footer">
+<button class="btn btn-outline-primary">ถัดไป →</button>
 </div>
 
 </div>

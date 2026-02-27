@@ -1,220 +1,576 @@
 <?php
 require_once '../config/connect.php';
+require_once '../config/checklogin.php';
 
-/* ================= PAGINATION ================= */
-$limit = 20;
-$page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
-if($page < 1) $page = 1;
+/* ================= PARAM ================= */
+$search = $_GET['search'] ?? '';
+$type   = $_GET['type'] ?? '';
+$proj   = $_GET['project'] ?? '';
+$page   = $_GET['page'] ?? 1;
+
+$limit  = 15;
 $offset = ($page-1)*$limit;
 
-/* ================= FILTER ================= */
-$type = $_GET['type'] ?? '';
+/* ================= SAVE ================= */
+if(isset($_POST['save'])){
+    $id = $_POST['asset_id'];
 
-$where = "";
-$params = [];
+    $value = $_POST['machine_value'];
+    $value = ($value === '' ? null : $value);
 
-if($type != ''){
-    $where = "WHERE a.Equipment_details = ?";
-    $params[] = $type;
+    $y1 = $_POST['yfm_1'] ?? null;
+    $y2 = $_POST['yfm_2'] ?? null;
+
+    $date1 = !empty($y1) ? date('Y-m-01', strtotime($y1)) : null;
+    $date2 = !empty($y2) ? date('Y-m-01', strtotime($y2)) : null;
+
+    $how1 = $date1 ? date('Y') - date('Y', strtotime($date1)) : null;
+    $how2 = $date2 ? date('Y') - date('Y', strtotime($date2)) : null;
+
+    $stmt = $conn->prepare("
+        UPDATE IT_assets SET
+            machine_value=?,
+            yfm_1=?,
+            How_long=?,
+            yfm_2=?,
+            How_long2=?
+        WHERE asset_id=?
+    ");
+    $stmt->execute([$value,$date1,$how1,$date2,$how2,$id]);
+
+    // ✅ กัน refresh submit ซ้ำ
+    header("Location: service_life_view.php?success=1");
+    exit();
 }
 
-/* ================= LOAD DATA ================= */
+/* ================= FILTER ================= */
+$typeList = $conn->query("SELECT DISTINCT type_equipment FROM IT_assets ORDER BY type_equipment")->fetchAll(PDO::FETCH_ASSOC);
+$projList = $conn->query("SELECT DISTINCT project FROM IT_assets ORDER BY project")->fetchAll(PDO::FETCH_ASSOC);
+
+/* ================= MAIN QUERY ================= */
 $sql = "
 SELECT 
-    a.*,
-    u.user_employee,
-    u.user_project
+a.asset_id,
+a.no_pc,
+a.project,
+a.type_equipment,
+a.spec,a.ram,a.ssd,a.gpu,
+a.machine_value,
+a.yfm_1,a.How_long,
+a.yfm_2,a.How_long2,
+u.user_employee
 FROM IT_assets a
-LEFT JOIN IT_user_information u ON a.asset_id = u.asset_id
-$where
-ORDER BY a.asset_id DESC
-OFFSET $offset ROWS FETCH NEXT $limit ROWS ONLY
+LEFT JOIN IT_user_information u ON u.asset_id=a.asset_id
+WHERE 1=1
 ";
 
-$stmt = $conn->prepare($sql);
-$stmt->execute($params);
-$data = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$params = [];
 
-/* ================= COUNT PAGE ================= */
-$total = $conn->query("SELECT COUNT(*) FROM IT_assets")->fetchColumn();
-$total_pages = ceil($total / $limit);
+if($search!=''){
+    $sql.=" AND (a.no_pc LIKE ? OR u.user_employee LIKE ? OR a.project LIKE ?)";
+    $params[]="%$search%";
+    $params[]="%$search%";
+    $params[]="%$search%";
+}
+
+if($type!=''){
+    $sql.=" AND a.type_equipment=?";
+    $params[]=$type;
+}
+
+if($proj!=''){
+    $sql.=" AND a.project=?";
+    $params[]=$proj;
+}
+
+$sql.=" ORDER BY a.project OFFSET $offset ROWS FETCH NEXT $limit ROWS ONLY";
+
+$stmt=$conn->prepare($sql);
+$stmt->execute($params);
+$data=$stmt->fetchAll(PDO::FETCH_ASSOC);
 
 include 'partials/header.php';
 include 'partials/sidebar.php';
 ?>
 
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+
 <style>
-.card-header{
-    background: linear-gradient(135deg,#0d6efd,#0dcaf0);
-    color:white;
+body{font-family:'Sarabun';font-size:14px;background:#eef6ff;}
+.card-header{background:linear-gradient(135deg,#0d6efd,#0dcaf0);color:white;}
+.table thead{background:#0d6efd;color:white;}
+.modal-header{background:#0d6efd;color:white;}
+.badge-grade{padding:5px 10px;border-radius:8px;font-size:13px;}
+
+.detail-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:12px;
 }
-.table td,.table th{white-space:nowrap;}
+
+.detail-box{
+    background:#f1f7ff;
+    border-radius:10px;
+    padding:12px;
+    text-align:left;
+    box-shadow:0 2px 6px rgba(0,0,0,0.08);
+}
+
+.detail-box b{
+    display:block;
+    color:#0d6efd;
+    margin-bottom:4px;
+}
+.repair-green{
+    background: linear-gradient(135deg,#b7e4c7,#95d5b2);
+    padding:40px;
+    border-radius:15px;
+}
+
+/* GRID */
+.repair-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:20px;
+}
+
+/* BOX CARD */
+.repair-grid .box{
+    background:#ffffff;
+    border-radius:12px;
+    padding:18px 20px;
+    text-align:left;
+    box-shadow:0 6px 12px rgba(0,0,0,0.1);
+    transition:0.25s ease;
+    position:relative;
+    overflow:hidden;
+}
+
+/* hover effect */
+.repair-grid .box:hover{
+    transform:translateY(-5px) scale(1.02);
+    box-shadow:0 10px 20px rgba(0,0,0,0.15);
+}
+
+/* label */
+.repair-grid .box b{
+    display:block;
+    font-size:13px;
+    color:#6c757d;
+    margin-bottom:5px;
+}
+
+/* value */
+.repair-grid .box{
+    font-size:18px;
+    font-weight:600;
+    color:#0d6efd;
+}
+
+/* highlight card (ราคา) */
+.repair-grid .highlight{
+    background:linear-gradient(135deg,#0d6efd,#0dcaf0);
+    color:white;
+    font-size:22px;
+    text-align:center;
+}
+
+/* footer */
+.repair-footer{
+    text-align:center;
+    margin-top:30px;
+}
+
+/* next button */
+.btn-next{
+    padding:10px 30px;
+    font-size:18px;
+    border-radius:30px;
+    box-shadow:0 5px 10px rgba(0,0,0,0.2);
+    transition:0.25s;
+}
+
+.btn-next:hover{
+    transform:scale(1.08);
+}
 </style>
 
-<div class="container-fluid p-3">
-<div class="card shadow border-0">
+<div class="container mt-4">
+<div class="card shadow">
+
 <div class="card-header">
-<h5 class="mb-0">📊 ระบบคำนวณอายุการใช้งาน (Service Life)</h5>
+📊 รายงาน Service Life อุปกรณ์
 </div>
 
 <div class="card-body">
 
-<!-- SEARCH + FILTER -->
-<div class="row mb-3">
-<div class="col-md-6">
-<input type="text" id="searchInput" class="form-control"
-placeholder="🔍 ค้นหา ผู้ใช้ / โครงการ / รหัสเครื่อง">
+<!-- FILTER -->
+<form class="row mb-3">
+<div class="col-md-3">
+<input name="search" id="searchBox" class="form-control" placeholder="ค้นหา..." value="<?= $search ?>">
 </div>
 
-<div class="col-md-6">
-<form method="get">
-<select name="type" class="form-control" onchange="this.form.submit()">
-<option value="">-- ทุกประเภท --</option>
-<option value="PC" <?= $type=='PC'?'selected':'' ?>>PC</option>
-<option value="NOTEBOOK" <?= $type=='NOTEBOOK'?'selected':'' ?>>NOTEBOOK</option>
-<option value="PRINTER" <?= $type=='PRINTER'?'selected':'' ?>>PRINTER</option>
+<div class="col-md-3">
+<select name="type" class="form-control">
+<option value="">-- ประเภท --</option>
+<?php foreach($typeList as $t): ?>
+<option value="<?= $t['type_equipment'] ?>" <?= $type==$t['type_equipment']?'selected':'' ?>>
+<?= $t['type_equipment'] ?>
+</option>
+<?php endforeach; ?>
 </select>
-</form>
-</div>
 </div>
 
-<div class="table-responsive">
-<table class="table table-bordered table-hover">
-<thead class="table-primary text-center">
+<div class="col-md-3">
+<select name="project" class="form-control">
+<option value="">-- โครงการ --</option>
+<?php foreach($projList as $p): ?>
+<option value="<?= $p['project'] ?>" <?= $proj==$p['project']?'selected':'' ?>>
+<?= $p['project'] ?>
+</option>
+<?php endforeach; ?>
+</select>
+</div>
+
+<div class="col-md-3">
+<button class="btn btn-primary w-100">🔍 ค้นหา</button>
+</div>
+</form>
+
+<table class="table table-bordered table-hover text-center" id="dataTable">
+<thead>
 <tr>
 <th>#</th>
 <th>ผู้ใช้</th>
 <th>โครงการ</th>
 <th>รหัส</th>
-<th>Spec</th>
-<th>ปีผลิต</th>
-<th>อายุ</th>
-<th>ปีใช้งาน</th>
-<th>อายุใช้งาน</th>
 <th>มูลค่า</th>
-<th>สถานะ</th>
-<th>แก้ไข</th>
-<th>ลบ</th>
+<th>CPU อายุ</th>
+<th>ปี</th>
+<th>ซื้อ</th>
+<th>ปีใช้งาน</th>
+<th>วัดค่า</th>
+<th>รายละเอียด</th>
+<th>ซ่อม</th>
+<th>บันทึก</th>
 </tr>
 </thead>
 
-<tbody id="tableBody">
+<tbody>
 
-<?php $i=1; foreach($data as $row):
+<?php $i=1; foreach($data as $row): 
 
 $spec = $row['spec']." | ".$row['ram']." | ".$row['ssd']." | ".$row['gpu'];
 
-$age1 = $row['How_long'];
-$age2 = $row['How_long2'];
+$age = $row['How_long2'];
 
-/* STATUS FROM อายุใช้งาน */
-$status = 'เกรด A - ใช้งานได้ดี';
-$badge = 'badge bg-success';
-
-if($age2 >= 10){
-    $status = 'เกรด C - ควรเปลี่ยน';
-    $badge = 'badge bg-danger';
-}else if($age2 >= 5){
-    $status = 'เกรด B - พอใช้งาน';
-    $badge = 'badge bg-warning';
+if(empty($row['yfm_2'])){
+    $grade = "<span class='badge bg-secondary'>ยังไม่ได้บันทึกข้อมูล</span>";
 }
-
+elseif((int)$age < 4){
+    $grade = "<span class='badge bg-success'>A - ใช้งานได้ดี</span>";
+}
+elseif((int)$age <= 8){
+    $grade = "<span class='badge bg-warning text-dark'>B - พอใช้</span>";
+}
+else{
+    $grade = "<span class='badge bg-danger'>C - ควรเปลี่ยน</span>";
+}
 ?>
+
+<form method="post">
+
+<!-- 🔥 แก้ตรงนี้: ผูก hidden กับ form ปุ่ม save -->
+<input type="hidden" name="asset_id" form="form<?= $row['asset_id'] ?>" value="<?= $row['asset_id'] ?>">
+<input type="hidden" name="old_value" form="form<?= $row['asset_id'] ?>" value="<?= $row['machine_value'] ?>">
+<input type="hidden" name="old_y1" form="form<?= $row['asset_id'] ?>" value="<?= !empty($row['yfm_1']) ? substr($row['yfm_1'],0,7) : '' ?>">
+<input type="hidden" name="old_y2" form="form<?= $row['asset_id'] ?>" value="<?= !empty($row['yfm_2']) ? substr($row['yfm_2'],0,7) : '' ?>">
 
 <tr>
 
 <td><?= $i++ ?></td>
-<td><?= $row['user_employee'] ?? '-' ?></td>
-<td><?= $row['user_project'] ?? '-' ?></td>
-<td class="fw-bold text-primary"><?= $row['no_pc'] ?></td>
+<td><?= $row['user_employee'] ?></td>
+<td><?= $row['project'] ?></td>
+<td><?= $row['no_pc'] ?></td>
 
-<td><?= $spec ?></td>
-
-<!-- ปีผลิต -->
 <td>
-<form method="post">
-<input type="hidden" name="asset_id" value="<?= $row['asset_id'] ?>">
-<input type="month" name="yfm_1"
-value="<?= $row['yfm_1'] ? date('Y-m',strtotime($row['yfm_1'])) : '' ?>"
-class="form-control form-control-sm">
-<button name="save_yfm" class="btn btn-sm btn-primary mt-1">💾</button>
+<input type="number" name="machine_value" form="form<?= $row['asset_id'] ?>"
+       class="form-control" value="<?= $row['machine_value'] ?>">
+</td>
+
+<td>
+<input type="text" name="yfm_1" form="form<?= $row['asset_id'] ?>"
+       class="form-control y1"
+       value="<?= !empty($row['yfm_1']) ? substr($row['yfm_1'],0,7) : '' ?>">
+</td>
+
+<td><?= $row['How_long'] ?> ปี</td>
+
+<td>
+<input type="text" name="yfm_2" form="form<?= $row['asset_id'] ?>"
+       class="form-control y2"
+       value="<?= !empty($row['yfm_2']) ? substr($row['yfm_2'],0,7) : '' ?>">
+</td>
+
+<td><?= $row['How_long2'] ?> ปี</td>
+
+<td><?= $grade ?></td>
+
+<td>
+<button type="button" class="btn btn-info btn-sm"
+        data-bs-toggle="modal"
+        data-bs-target="#detail<?= $i ?>">ดู</button>
+</td>
+
+<td>
+<button type="button" class="btn btn-warning btn-sm"
+        data-bs-toggle="modal"
+        data-bs-target="#repair<?= $i ?>">ดู</button>
+</td>
+
 </form>
-</td>
 
-<td><?= $age1 ?> ปี</td>
-
-<!-- ปีใช้งาน -->
 <td>
-<form method="post">
+
+<form method="post" id="form<?= $row['asset_id'] ?>">
+
 <input type="hidden" name="asset_id" value="<?= $row['asset_id'] ?>">
-<input type="month" name="yfm_2"
-value="<?= $row['yfm_2'] ? date('Y-m',strtotime($row['yfm_2'])) : '' ?>"
-class="form-control form-control-sm">
-<button name="save_yfm2" class="btn btn-sm btn-success mt-1">💾</button>
+<input type="hidden" name="old_value" value="<?= $row['machine_value'] ?>">
+<input type="hidden" name="old_y1" value="<?= !empty($row['yfm_1']) ? substr($row['yfm_1'],0,7) : '' ?>">
+<input type="hidden" name="old_y2" value="<?= !empty($row['yfm_2']) ? substr($row['yfm_2'],0,7) : '' ?>">
+
+<button type="button"
+        class="btn btn-primary btn-sm btn-save"
+        data-form="form<?= $row['asset_id'] ?>">
+💾
+</button>
+
 </form>
+
 </td>
 
-<td><?= $age2 ?> ปี</td>
+<!-- CONFIRM MODAL -->
+<div class="modal fade" id="confirmModal">
+<div class="modal-dialog modal-dialog-centered">
+<div class="modal-content">
 
-<!-- มูลค่า -->
-<td>
-<form method="post">
-<input type="hidden" name="asset_id" value="<?= $row['asset_id'] ?>">
-<input type="number" name="Machine_value"
-value="<?= $row['Machine_value'] ?>"
-class="form-control form-control-sm">
-<button name="save_value" class="btn btn-sm btn-success mt-1">💾</button>
-</form>
-</td>
-
-<td><span class="<?= $badge ?>"><?= $status ?></span></td>
-
-<td>
-<button class="btn btn-warning btn-sm">✏️</button>
-</td>
-
-<td>
-<a href="?delete=<?= $row['asset_id'] ?>" class="btn btn-danger btn-sm">🗑</a>
-</td>
-
-</tr>
-
-<?php endforeach; ?>
-</tbody>
-</table>
+<div class="modal-header bg-primary text-white">
+<h5>ยืนยันการบันทึก</h5>
+<button class="btn-close" data-bs-dismiss="modal"></button>
 </div>
 
+<div class="modal-body">
+
+<div id="changeSummary" style="font-size:14px"></div>
+
+</div>
+
+<div class="modal-footer">
+<button class="btn btn-secondary" data-bs-dismiss="modal">ยกเลิก</button>
+<button id="confirmSaveBtn" class="btn btn-primary">ยืนยันบันทึก</button>
+</div>
+
+</div>
+</div>
+</div>
+
+<!-- MODAL DETAIL -->
+<div class="modal fade" id="detail<?= $i ?>">
+<div class="modal-dialog modal-lg modal-dialog-centered">
+<div class="modal-content">
+
+<div class="modal-header">
+<h5>📄 รายละเอียดอุปกรณ์</h5>
+<button class="btn-close" data-bs-dismiss="modal"></button>
+</div>
+
+<div class="modal-body">
+
+<div class="detail-grid">
+
+<div class="detail-box">
+<b>ผู้ใช้งาน</b>
+<?= $row['user_employee'] ?>
+</div>
+
+<div class="detail-box">
+<b>โครงการ</b>
+<?= $row['project'] ?>
+</div>
+
+<div class="detail-box">
+<b>รหัสอุปกรณ์</b>
+<?= $row['no_pc'] ?>
+</div>
+
+<div class="detail-box">
+<b>Spec เครื่อง</b>
+<?= $spec ?>
+</div>
+
+<div class="detail-box">
+<b>CPU อายุ</b>
+<?= $row['How_long'] ?> ปี
+</div>
+
+<div class="detail-box">
+<b>อายุใช้งานจริง</b>
+<?= $row['How_long2'] ?> ปี
+</div>
+
+<div class="detail-box">
+<b>วันที่เริ่ม CPU</b>
+<?= $row['yfm_1'] ?>
+</div>
+
+<div class="detail-box">
+<b>วันที่ซื้อเครื่อง</b>
+<?= $row['yfm_2'] ?>
+</div>
+
+</div>
+
+</div>
+
+</div>
+</div>
+</div>
+
+<!-- MODAL REPAIR -->
+<div class="modal fade" id="repair<?= $i ?>">
+<div class="modal-dialog modal-lg modal-dialog-centered">
+<div class="modal-content">
+
+<div class="modal-header bg-warning">
+<h5>🛠 ประวัติการซ่อม</h5>
+<button class="btn-close" data-bs-dismiss="modal"></button>
+</div>
+
+<div class="modal-body repair-green">
+
+<div class="repair-grid">
+
+<div>
+<b>ชื่อผู้ใช้</b><br>
+<?= $row['user_employee'] ?>
+</div>
+
+<div>
+<b>โครงการ</b><br>
+<?= $row['project'] ?>
+</div>
+
+<div>
+<b>รหัสอุปกรณ์</b><br>
+<?= $row['no_pc'] ?>
+</div>
+
+<div>
+<b>Spec เครื่อง</b><br>
+<?= $spec ?>
+</div>
+
+<div>
+<b>วันที่ซื้อ</b><br>
+<?= $row['yfm_2'] ?>
+</div>
+
+<div>
+<b>CPU อายุ</b><br>
+<?= $row['How_long'] ?> ปี
+</div>
+
+<div>
+<b>อายุใช้งาน</b><br>
+<?= $row['How_long2'] ?> ปี
+</div>
+
+<div>
+<b>มูลค่าเครื่อง</b><br>
+<?= $row['machine_value'] ?>
+</div>
+
+</div>
+
+<div class="repair-footer">
+<button class="btn btn-primary">ถัดไป</button>
+</div>
+
+</div>
+
+</div>
+</div>
+</div>
+
+<?php endforeach; ?>
+
+</tbody>
+</table>
+
 <!-- PAGINATION -->
-<nav>
-<ul class="pagination justify-content-center">
-
-<?php
-$start = max(1, $page-5);
-$end = min($total_pages, $page+5);
-
-for($p=$start;$p<=$end;$p++):
-?>
-
-<li class="page-item <?= $p==$page?'active':'' ?>">
-<a class="page-link" href="?page=<?= $p ?>&type=<?= $type ?>"><?= $p ?></a>
-</li>
-
-<?php endfor; ?>
-
-</ul>
-</nav>
+<div class="text-center mt-3">
+<a href="?page=<?= max(1,$page-1) ?>&search=<?= $search ?>&type=<?= $type ?>&project=<?= $proj ?>" class="btn btn-primary">⬅ ก่อนหน้า</a>
+<a href="?page=<?= $page+1 ?>&search=<?= $search ?>&type=<?= $type ?>&project=<?= $proj ?>" class="btn btn-primary">ถัดไป ➡</a>
+</div>
 
 </div>
 </div>
 </div>
 
 <script>
+flatpickr(".y1",{dateFormat:"Y-m"});
+flatpickr(".y2",{dateFormat:"Y-m"});
+
 // realtime search
-document.getElementById("searchInput").addEventListener("keyup", function(){
-let v=this.value.toLowerCase();
-document.querySelectorAll("#tableBody tr").forEach(tr=>{
-tr.style.display = tr.innerText.toLowerCase().includes(v)?'':'none';
+document.getElementById("searchBox").addEventListener("keyup",function(){
+    let v=this.value.toLowerCase();
+    document.querySelectorAll("#dataTable tbody tr").forEach(tr=>{
+        tr.style.display = tr.innerText.toLowerCase().includes(v)?'':'none';
+    });
 });
+
+let currentForm = null;
+
+document.querySelectorAll(".btn-save").forEach(btn=>{
+    btn.addEventListener("click", function(){
+
+        let formId = this.getAttribute("data-form");
+        let form = document.getElementById(formId);
+        currentForm = form;
+
+        // ❗ แก้ตรงนี้: input อยู่ข้างนอก form ต้องหาโดยใช้ [form="formID"]
+        let newVal = document.querySelector('[name="machine_value"][form="'+formId+'"]').value;
+        let newY1  = document.querySelector('[name="yfm_1"][form="'+formId+'"]').value;
+        let newY2  = document.querySelector('[name="yfm_2"][form="'+formId+'"]').value;
+
+        // ค่าเก่าอยู่ใน form ปุ่ม save (หาได้ปกติ)
+        let oldVal = form.querySelector("[name=old_value]").value;
+        let oldY1  = form.querySelector("[name=old_y1]").value;
+        let oldY2  = form.querySelector("[name=old_y2]").value;
+
+        let html = `
+        <b>Machine Value:</b> ${oldVal} → ${newVal}<br>
+        <b>CPU Date:</b> ${oldY1} → ${newY1}<br>
+        <b>Purchase Date:</b> ${oldY2} → ${newY2}
+        `;
+
+        document.getElementById("changeSummary").innerHTML = html;
+
+        let modal = new bootstrap.Modal(document.getElementById('confirmModal'));
+        modal.show();
+    });
+});
+
+document.getElementById("confirmSaveBtn").addEventListener("click",function(){
+    if(currentForm){
+        let input = document.createElement("input");
+        input.type = "hidden";
+        input.name = "save";
+        input.value = "1";
+        currentForm.appendChild(input);
+        currentForm.submit();
+    }
 });
 </script>
 
