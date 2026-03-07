@@ -3,12 +3,19 @@ require_once '../config/connect.php';
 include 'partials/header.php';
 include 'partials/sidebar.php';
 
-/* ================= โหลด asset ================= */
-$assets = $conn->query("
+$userProject = $_SESSION['site'];
+
+
+/* ================= โหลด asset เฉพาะ project ของ user ================= */
+$stmt = $conn->prepare("
 SELECT asset_id, no_pc, new_no, spec, ram, gpu, ssd
 FROM IT_assets
+WHERE project = ?
 ORDER BY no_pc
-")->fetchAll(PDO::FETCH_ASSOC);
+");
+$stmt->execute([$userProject]);
+$assets = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
 
 /* ================= SUBMIT ================= */
 if(isset($_POST['submit'])){

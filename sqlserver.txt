@@ -1,9 +1,22 @@
+***เช็ค DEBUG***
+echo "<pre>";
+echo "USER NAME: ".$_SESSION['fullname']."\n";
+echo "USER PROJECT: ".$userProject."\n";
+print_r($assets);
+echo "</pre>";
+exit;
+***
+
 ***คำสั่งเคลียร์ฐานข้อมูล เริ่ม int นับ 1 ใหม่***
 DELETE FROM ชื่อฐานข้อมูล;
 DELETE FROM ชื่อฐานข้อมูล;
-245
 DBCC CHECKIDENT ('ชื่อฐานข้อมูล', RESEED, 0);
 DBCC CHECKIDENT ('ชื่อฐานข้อมูล', RESEED, 0);
+*********************************
+****************
+UPDATE IT_assets
+SET project = N'สำนักงานใหญ่';
+****************
 
 ****เช็ค FK***
 SELECT 
@@ -23,42 +36,6 @@ SELECT
 FROM Employee
 GROUP BY site
 ORDER BY site;
-****************************************************************
-<!-- 🔍 SEARCH + FILTER --> ด้านบนสุด ก่อน <table>
-<div class="row mb-3">
-
-    <div class="col-md-4">
-        <input type="text" id="searchInput"
-        class="form-control"
-        placeholder="🔍 ค้นหา ผู้ใช้ / รหัสเครื่อง / อาการเสีย">
-    </div>
-
-    <div class="col-md-3">
-        <select id="statusFilter" class="form-control">
-            <option value="">-- ทุกสถานะ --</option>
-            <option value="รอดำเนินการ">🟡 รอดำเนินการ</option>
-            <option value="กำลังซ่อม">🟠 กำลังซ่อม</option>
-            <option value="เสร็จแล้ว">🟢 เสร็จแล้ว</option>
-        </select>
-    </div>
-
-</div>
-
-<tbody id="tableBody">
-
-<!-- 🔥 REALTIME SEARCH (ไม่ reload ไม่ delay) -->
-<script>
-document.getElementById("searchInput").addEventListener("keyup", function(){
-    let value = this.value.toLowerCase();
-    let rows = document.querySelectorAll("#tableBody tr");
-
-    rows.forEach(row=>{
-        let text = row.innerText.toLowerCase();
-        row.style.display = text.includes(value) ? "" : "none";
-    });
-});
-</script>
-*****************************************************************
 
 1. ดูค่าทั้งหมดในคอลัมน์ Equipment_details
 SELECT DISTINCT Equipment_details

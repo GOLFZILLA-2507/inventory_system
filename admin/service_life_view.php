@@ -412,15 +412,20 @@ else{
 <?= $row['yfm_2'] ?>
 </div>
 
+<div class="detail-box">
+<label>มูลค่าเครื่อง</label>
+<div class="price"><?= number_format($row['machine_value']) ?> บาท</div>
 </div>
 
 </div>
 
 </div>
+
+</div>
 </div>
 </div>
 
-<!-- ================= MODAL REPAIR (ใหม่สวยแล้ว) ================= -->
+<!-- ================= MODAL REPAIR ================= -->
 <div class="modal fade" id="repair<?= $i ?>">
 <div class="modal-dialog modal-lg modal-dialog-centered">
 <div class="modal-content">
@@ -463,12 +468,12 @@ else{
 <label>อายุใช้งาน</label>
 <div><?= $row['How_long2'] ?> ปี</div>
 </div>
-
+<!--
 <div class="item full">
 <label>มูลค่าเครื่อง</label>
 <div class="price"><?= number_format($row['machine_value']) ?> บาท</div>
 </div>
-
+-->
 </div>
 
 <div class="repair-footer">

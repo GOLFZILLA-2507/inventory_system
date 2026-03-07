@@ -38,7 +38,6 @@ if(isset($_POST['save'])){
     ");
     $stmt->execute([$value,$date1,$how1,$date2,$how2,$id]);
 
-    // ✅ กัน refresh submit ซ้ำ
     header("Location: service_life_view.php?success=1");
     exit();
 }
@@ -122,90 +121,69 @@ body{font-family:'Sarabun';font-size:14px;background:#eef6ff;}
     color:#0d6efd;
     margin-bottom:4px;
 }
-.repair-green{
-    background: linear-gradient(135deg,#b7e4c7,#95d5b2);
-    padding:40px;
-    border-radius:15px;
+
+/* ===== NEW REPAIR MODAL STYLE ===== */
+.repair-clean{
+    background:#ffffff;
+    padding:30px;
+    border-radius:12px;
 }
 
-/* GRID */
-.repair-grid{
+.repair-head{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:20px;
+    padding-bottom:10px;
+    border-bottom:1px solid #e5e7eb;
+}
+
+.repair-grid-clean{
     display:grid;
     grid-template-columns:1fr 1fr;
-    gap:20px;
+    gap:16px;
 }
 
-/* BOX CARD */
-.repair-grid .box{
-    background:#ffffff;
-    border-radius:12px;
-    padding:18px 20px;
-    text-align:left;
-    box-shadow:0 6px 12px rgba(0,0,0,0.1);
-    transition:0.25s ease;
-    position:relative;
-    overflow:hidden;
+.repair-grid-clean .item{
+    background:#f8fafc;
+    padding:15px 18px;
+    border-radius:10px;
+    border:1px solid #e5e7eb;
 }
 
-/* hover effect */
-.repair-grid .box:hover{
-    transform:translateY(-5px) scale(1.02);
-    box-shadow:0 10px 20px rgba(0,0,0,0.15);
+.repair-grid-clean .full{
+    grid-column:1 / -1;
 }
 
-/* label */
-.repair-grid .box b{
+.repair-grid-clean label{
+    font-size:12px;
+    color:#6b7280;
     display:block;
-    font-size:13px;
-    color:#6c757d;
-    margin-bottom:5px;
 }
 
-/* value */
-.repair-grid .box{
-    font-size:18px;
+.repair-grid-clean .item div{
+    font-size:16px;
     font-weight:600;
-    color:#0d6efd;
+    color:#111827;
 }
 
-/* highlight card (ราคา) */
-.repair-grid .highlight{
-    background:linear-gradient(135deg,#0d6efd,#0dcaf0);
-    color:white;
+.price{
     font-size:22px;
-    text-align:center;
+    color:#0d6efd;
+    font-weight:700;
 }
 
-/* footer */
 .repair-footer{
-    text-align:center;
-    margin-top:30px;
-}
-
-/* next button */
-.btn-next{
-    padding:10px 30px;
-    font-size:18px;
-    border-radius:30px;
-    box-shadow:0 5px 10px rgba(0,0,0,0.2);
-    transition:0.25s;
-}
-
-.btn-next:hover{
-    transform:scale(1.08);
+    margin-top:25px;
+    text-align:right;
 }
 </style>
 
 <div class="container mt-4">
 <div class="card shadow">
-
-<div class="card-header">
-📊 รายงาน Service Life อุปกรณ์
-</div>
-
+<div class="card-header">📊 รายงาน Service Life อุปกรณ์</div>
 <div class="card-body">
 
-<!-- FILTER -->
 <form class="row mb-3">
 <div class="col-md-3">
 <input name="search" id="searchBox" class="form-control" placeholder="ค้นหา..." value="<?= $search ?>">
@@ -260,9 +238,7 @@ body{font-family:'Sarabun';font-size:14px;background:#eef6ff;}
 <tbody>
 
 <?php $i=1; foreach($data as $row): 
-
 $spec = $row['spec']." | ".$row['ram']." | ".$row['ssd']." | ".$row['gpu'];
-
 $age = $row['How_long2'];
 
 if(empty($row['yfm_2'])){
@@ -279,165 +255,36 @@ else{
 }
 ?>
 
-<form method="post">
-
-<!-- 🔥 แก้ตรงนี้: ผูก hidden กับ form ปุ่ม save -->
-<input type="hidden" name="asset_id" form="form<?= $row['asset_id'] ?>" value="<?= $row['asset_id'] ?>">
-<input type="hidden" name="old_value" form="form<?= $row['asset_id'] ?>" value="<?= $row['machine_value'] ?>">
-<input type="hidden" name="old_y1" form="form<?= $row['asset_id'] ?>" value="<?= !empty($row['yfm_1']) ? substr($row['yfm_1'],0,7) : '' ?>">
-<input type="hidden" name="old_y2" form="form<?= $row['asset_id'] ?>" value="<?= !empty($row['yfm_2']) ? substr($row['yfm_2'],0,7) : '' ?>">
-
 <tr>
-
 <td><?= $i++ ?></td>
 <td><?= $row['user_employee'] ?></td>
 <td><?= $row['project'] ?></td>
 <td><?= $row['no_pc'] ?></td>
 
-<td>
-<input type="number" name="machine_value" form="form<?= $row['asset_id'] ?>"
-       class="form-control" value="<?= $row['machine_value'] ?>">
-</td>
-
-<td>
-<input type="text" name="yfm_1" form="form<?= $row['asset_id'] ?>"
-       class="form-control y1"
-       value="<?= !empty($row['yfm_1']) ? substr($row['yfm_1'],0,7) : '' ?>">
-</td>
+<td><input type="number" class="form-control" value="<?= $row['machine_value'] ?>"></td>
+<td><input type="text" class="form-control" value="<?= substr($row['yfm_1'],0,7) ?>"></td>
 
 <td><?= $row['How_long'] ?> ปี</td>
 
-<td>
-<input type="text" name="yfm_2" form="form<?= $row['asset_id'] ?>"
-       class="form-control y2"
-       value="<?= !empty($row['yfm_2']) ? substr($row['yfm_2'],0,7) : '' ?>">
-</td>
-
+<td><input type="text" class="form-control" value="<?= substr($row['yfm_2'],0,7) ?>"></td>
 <td><?= $row['How_long2'] ?> ปี</td>
 
 <td><?= $grade ?></td>
 
 <td>
-<button type="button" class="btn btn-info btn-sm"
-        data-bs-toggle="modal"
-        data-bs-target="#detail<?= $i ?>">ดู</button>
+<button class="btn btn-info btn-sm" data-bs-toggle="modal" data-bs-target="#detail<?= $i ?>">ดู</button>
 </td>
 
 <td>
-<button type="button" class="btn btn-warning btn-sm"
-        data-bs-toggle="modal"
-        data-bs-target="#repair<?= $i ?>">ดู</button>
+<button class="btn btn-warning btn-sm" data-bs-toggle="modal" data-bs-target="#repair<?= $i ?>">ดู</button>
 </td>
-
-</form>
 
 <td>
-
-<form method="post" id="form<?= $row['asset_id'] ?>">
-
-<input type="hidden" name="asset_id" value="<?= $row['asset_id'] ?>">
-<input type="hidden" name="old_value" value="<?= $row['machine_value'] ?>">
-<input type="hidden" name="old_y1" value="<?= !empty($row['yfm_1']) ? substr($row['yfm_1'],0,7) : '' ?>">
-<input type="hidden" name="old_y2" value="<?= !empty($row['yfm_2']) ? substr($row['yfm_2'],0,7) : '' ?>">
-
-<button type="button"
-        class="btn btn-primary btn-sm btn-save"
-        data-form="form<?= $row['asset_id'] ?>">
-💾
-</button>
-
-</form>
-
+<button class="btn btn-primary btn-sm">💾</button>
 </td>
+</tr>
 
-<!-- CONFIRM MODAL -->
-<div class="modal fade" id="confirmModal">
-<div class="modal-dialog modal-dialog-centered">
-<div class="modal-content">
-
-<div class="modal-header bg-primary text-white">
-<h5>ยืนยันการบันทึก</h5>
-<button class="btn-close" data-bs-dismiss="modal"></button>
-</div>
-
-<div class="modal-body">
-
-<div id="changeSummary" style="font-size:14px"></div>
-
-</div>
-
-<div class="modal-footer">
-<button class="btn btn-secondary" data-bs-dismiss="modal">ยกเลิก</button>
-<button id="confirmSaveBtn" class="btn btn-primary">ยืนยันบันทึก</button>
-</div>
-
-</div>
-</div>
-</div>
-
-<!-- MODAL DETAIL -->
-<div class="modal fade" id="detail<?= $i ?>">
-<div class="modal-dialog modal-lg modal-dialog-centered">
-<div class="modal-content">
-
-<div class="modal-header">
-<h5>📄 รายละเอียดอุปกรณ์</h5>
-<button class="btn-close" data-bs-dismiss="modal"></button>
-</div>
-
-<div class="modal-body">
-
-<div class="detail-grid">
-
-<div class="detail-box">
-<b>ผู้ใช้งาน</b>
-<?= $row['user_employee'] ?>
-</div>
-
-<div class="detail-box">
-<b>โครงการ</b>
-<?= $row['project'] ?>
-</div>
-
-<div class="detail-box">
-<b>รหัสอุปกรณ์</b>
-<?= $row['no_pc'] ?>
-</div>
-
-<div class="detail-box">
-<b>Spec เครื่อง</b>
-<?= $spec ?>
-</div>
-
-<div class="detail-box">
-<b>CPU อายุ</b>
-<?= $row['How_long'] ?> ปี
-</div>
-
-<div class="detail-box">
-<b>อายุใช้งานจริง</b>
-<?= $row['How_long2'] ?> ปี
-</div>
-
-<div class="detail-box">
-<b>วันที่เริ่ม CPU</b>
-<?= $row['yfm_1'] ?>
-</div>
-
-<div class="detail-box">
-<b>วันที่ซื้อเครื่อง</b>
-<?= $row['yfm_2'] ?>
-</div>
-
-</div>
-
-</div>
-
-</div>
-</div>
-</div>
-
-<!-- MODAL REPAIR -->
+<!-- ================= MODAL REPAIR (ใหม่สวยแล้ว) ================= -->
 <div class="modal fade" id="repair<?= $i ?>">
 <div class="modal-dialog modal-lg modal-dialog-centered">
 <div class="modal-content">
@@ -447,54 +294,49 @@ else{
 <button class="btn-close" data-bs-dismiss="modal"></button>
 </div>
 
-<div class="modal-body repair-green">
+<div class="modal-body repair-clean">
 
-<div class="repair-grid">
-
-<div>
-<b>ชื่อผู้ใช้</b><br>
-<?= $row['user_employee'] ?>
+<div class="repair-head">
+    <div>
+        <h5 class="mb-0"><?= $row['no_pc'] ?></h5>
+        <small class="text-muted"><?= $row['project'] ?></small>
+    </div>
+    <div class="badge bg-primary px-3 py-2">
+        <?= $row['user_employee'] ?>
+    </div>
 </div>
 
-<div>
-<b>โครงการ</b><br>
-<?= $row['project'] ?>
+<div class="repair-grid-clean">
+
+<div class="item">
+<label>Spec เครื่อง</label>
+<div><?= $spec ?></div>
 </div>
 
-<div>
-<b>รหัสอุปกรณ์</b><br>
-<?= $row['no_pc'] ?>
+<div class="item">
+<label>วันที่ซื้อ</label>
+<div><?= $row['yfm_2'] ?: '-' ?></div>
 </div>
 
-<div>
-<b>Spec เครื่อง</b><br>
-<?= $spec ?>
+<div class="item">
+<label>CPU อายุ</label>
+<div><?= $row['How_long'] ?> ปี</div>
 </div>
 
-<div>
-<b>วันที่ซื้อ</b><br>
-<?= $row['yfm_2'] ?>
+<div class="item">
+<label>อายุใช้งาน</label>
+<div><?= $row['How_long2'] ?> ปี</div>
 </div>
 
-<div>
-<b>CPU อายุ</b><br>
-<?= $row['How_long'] ?> ปี
-</div>
-
-<div>
-<b>อายุใช้งาน</b><br>
-<?= $row['How_long2'] ?> ปี
-</div>
-
-<div>
-<b>มูลค่าเครื่อง</b><br>
-<?= $row['machine_value'] ?>
+<div class="item full">
+<label>มูลค่าเครื่อง</label>
+<div class="price"><?= number_format($row['machine_value']) ?> บาท</div>
 </div>
 
 </div>
 
 <div class="repair-footer">
-<button class="btn btn-primary">ถัดไป</button>
+<button class="btn btn-outline-primary">ถัดไป →</button>
 </div>
 
 </div>
@@ -508,70 +350,8 @@ else{
 </tbody>
 </table>
 
-<!-- PAGINATION -->
-<div class="text-center mt-3">
-<a href="?page=<?= max(1,$page-1) ?>&search=<?= $search ?>&type=<?= $type ?>&project=<?= $proj ?>" class="btn btn-primary">⬅ ก่อนหน้า</a>
-<a href="?page=<?= $page+1 ?>&search=<?= $search ?>&type=<?= $type ?>&project=<?= $proj ?>" class="btn btn-primary">ถัดไป ➡</a>
-</div>
-
 </div>
 </div>
 </div>
-
-<script>
-flatpickr(".y1",{dateFormat:"Y-m"});
-flatpickr(".y2",{dateFormat:"Y-m"});
-
-// realtime search
-document.getElementById("searchBox").addEventListener("keyup",function(){
-    let v=this.value.toLowerCase();
-    document.querySelectorAll("#dataTable tbody tr").forEach(tr=>{
-        tr.style.display = tr.innerText.toLowerCase().includes(v)?'':'none';
-    });
-});
-
-let currentForm = null;
-
-document.querySelectorAll(".btn-save").forEach(btn=>{
-    btn.addEventListener("click", function(){
-
-        let formId = this.getAttribute("data-form");
-        let form = document.getElementById(formId);
-        currentForm = form;
-
-        // ❗ แก้ตรงนี้: input อยู่ข้างนอก form ต้องหาโดยใช้ [form="formID"]
-        let newVal = document.querySelector('[name="machine_value"][form="'+formId+'"]').value;
-        let newY1  = document.querySelector('[name="yfm_1"][form="'+formId+'"]').value;
-        let newY2  = document.querySelector('[name="yfm_2"][form="'+formId+'"]').value;
-
-        // ค่าเก่าอยู่ใน form ปุ่ม save (หาได้ปกติ)
-        let oldVal = form.querySelector("[name=old_value]").value;
-        let oldY1  = form.querySelector("[name=old_y1]").value;
-        let oldY2  = form.querySelector("[name=old_y2]").value;
-
-        let html = `
-        <b>Machine Value:</b> ${oldVal} → ${newVal}<br>
-        <b>CPU Date:</b> ${oldY1} → ${newY1}<br>
-        <b>Purchase Date:</b> ${oldY2} → ${newY2}
-        `;
-
-        document.getElementById("changeSummary").innerHTML = html;
-
-        let modal = new bootstrap.Modal(document.getElementById('confirmModal'));
-        modal.show();
-    });
-});
-
-document.getElementById("confirmSaveBtn").addEventListener("click",function(){
-    if(currentForm){
-        let input = document.createElement("input");
-        input.type = "hidden";
-        input.name = "save";
-        input.value = "1";
-        currentForm.appendChild(input);
-        currentForm.submit();
-    }
-});
-</script>
 
 <?php include 'partials/footer.php'; ?>

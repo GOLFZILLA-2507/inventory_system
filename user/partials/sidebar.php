@@ -35,11 +35,6 @@
                                 🖥️ จัดการอุปกรณ์พนักงาน
                             </a>
                         </li>
-                         <li>
-                            <a class="dropdown-item" href="asset_assign.php">
-                                🖥️ จัดการอุปกรณ์พนักงานtest
-                            </a>
-                        </li>
 
                         <li>
                             <a class="dropdown-item" href="asset_shared_view.php">

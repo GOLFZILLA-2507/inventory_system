@@ -17,7 +17,7 @@ SELECT
     u.user_monitor2,
     u.user_ups
 FROM IT_user_information u
-WHERE u.user_project = ?
+WHERE LTRIM(RTRIM(u.user_project)) = LTRIM(RTRIM(?))
 ORDER BY u.user_employee
 ");
 $userAssets->execute([$site]);
@@ -32,11 +32,9 @@ $sharedTypes = [
 $in  = str_repeat('?,', count($sharedTypes)-1) . '?';
 
 $sqlShared = "
-SELECT no_pc,type_equipment
-FROM IT_assets
-WHERE project = ?
-AND type_equipment IN ($in)
-ORDER BY type_equipment,no_pc
+SELECT user_no_pc,user_type_equipment FROM IT_user_information WHERE user_project = ?
+AND user_type_equipment IN ($in)
+ORDER BY user_type_equipment,user_no_pc
 ";
 
 $stmt = $conn->prepare($sqlShared);
@@ -122,8 +120,8 @@ foreach($sharedData as $s):
 
 <tr>
 <td class="text-center"><?= $j++ ?></td>
-<td><?= $s['type_equipment'] ?></td>
-<td class="fw-bold text-primary"><?= $s['no_pc'] ?></td>
+<td><?= $s['user_type_equipment'] ?></td>
+<td class="fw-bold text-primary"><?= $s['user_no_pc'] ?></td>
 </tr>
 
 <?php endforeach; ?>
