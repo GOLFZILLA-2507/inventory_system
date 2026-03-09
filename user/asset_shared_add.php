@@ -4,16 +4,17 @@ require_once '../config/checklogin.php';
 
 $site = $_SESSION['site'];
 
-/* ================= LOAD ASSETS BY TYPE ================= */
+/* ================= LOAD ASSETS ================= */
+
 function getByType($conn,$type){
-    $stmt = $conn->prepare("
-    SELECT asset_id,no_pc 
-    FROM IT_assets
-    WHERE type_equipment = ?
-    ORDER BY no_pc
-    ");
-    $stmt->execute([$type]);
-    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+$stmt=$conn->prepare("
+SELECT asset_id,no_pc
+FROM IT_assets
+WHERE type_equipment=?
+ORDER BY no_pc
+");
+$stmt->execute([$type]);
+return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
 $audio      = getByType($conn,'audio_set');
@@ -23,135 +24,254 @@ $printer    = getByType($conn,'Printer');
 $plotter    = getByType($conn,'Plotter');
 $projector  = getByType($conn,'Projector');
 
-
 /* ================= SUBMIT ================= */
+
 if(isset($_POST['submit'])){
 
-    // multi
-    $cctvArr = $_POST['cctv'] ?? [];
-    $nvrArr  = $_POST['nvr'] ?? [];
+$cctvArr = $_POST['cctv'] ?? [];
+$nvrArr  = $_POST['nvr'] ?? [];
 
-    // single
-    $audio = $_POST['audio_set'] ?? null;
-    $printer = $_POST['printer'] ?? null;
-    $plotter = $_POST['plotter'] ?? null;
-    $projector = $_POST['projector'] ?? null;
+$audio_id     = $_POST['audio_set'] ?? null;
+$printer_id   = $_POST['printer'] ?? null;
+$plotter_id   = $_POST['plotter'] ?? null;
+$projector_id = $_POST['projector'] ?? null;
 
-    // ====== map result ======
-    $map = [
-        'cctv'=>[],
-        'nvr'=>[],
-        'audio_set'=>null,
-        'printer'=>null,
-        'plotter'=>null,
-        'projector'=>null
-    ];
+/* ================= โหลดค่าปัจจุบัน ================= */
 
-    // ===== loop CCTV =====
-    foreach($cctvArr as $id){
-        if(!$id) continue;
+$old=$conn->prepare("
+SELECT *
+FROM IT_user_information
+WHERE user_project=?
+");
+$old->execute([$site]);
+$current=$old->fetch(PDO::FETCH_ASSOC);
 
-        $q = $conn->prepare("SELECT no_pc FROM IT_assets WHERE asset_id=?");
-        $q->execute([$id]);
-        $row = $q->fetch(PDO::FETCH_ASSOC);
+/* ================= ค่าเดิม ================= */
 
-        if($row){
-            $map['cctv'][] = $row['no_pc'];
+$old_cctv = !empty($current['user_cctv']) ? explode(',',$current['user_cctv']) : [];
+$old_nvr  = !empty($current['user_nvr'])  ? explode(',',$current['user_nvr'])  : [];
 
-            // update project
-            $upd = $conn->prepare("UPDATE IT_assets SET project=?, [update]=GETDATE() WHERE asset_id=?");
-            $upd->execute([$site,$id]);
-        }
-    }
+$old_audio   = $current['user_audio_set'] ?? null;
+$old_printer = $current['user_printer'] ?? null;
+$old_plotter = $current['user_plotter'] ?? null;
+$old_projector = $current['user_projector'] ?? null;
 
-    // ===== loop NVR =====
-    foreach($nvrArr as $id){
-        if(!$id) continue;
+$old_accessories = $current['user_Accessories_IT'] ?? null;
+$old_drone       = $current['user_Drone'] ?? null;
+$old_fiber       = $current['user_Optical_Fiber'] ?? null;
+$old_server      = $current['user_Server'] ?? null;
+$old_service     = $current['user_Service_life'] ?? null;
 
-        $q = $conn->prepare("SELECT no_pc FROM IT_assets WHERE asset_id=?");
-        $q->execute([$id]);
-        $row = $q->fetch(PDO::FETCH_ASSOC);
+/* ================= NEW ARRAY ================= */
 
-        if($row){
-            $map['nvr'][] = $row['no_pc'];
+$new_cctv=[];
+$new_nvr=[];
 
-            $upd = $conn->prepare("UPDATE IT_assets SET project=?, [update]=GETDATE() WHERE asset_id=?");
-            $upd->execute([$site,$id]);
-        }
-    }
+/* ================= CCTV ================= */
 
-    // ===== function single =====
-    function setSingle($conn,$id,$site){
-        if(!$id) return null;
-        $q = $conn->prepare("SELECT no_pc FROM IT_assets WHERE asset_id=?");
-        $q->execute([$id]);
-        $row = $q->fetch(PDO::FETCH_ASSOC);
-        if($row){
-            $upd = $conn->prepare("UPDATE IT_assets SET project=?, [update]=GETDATE() WHERE asset_id=?");
-            $upd->execute([$site,$id]);
-            return $row['no_pc'];
-        }
-        return null;
-    }
+foreach($cctvArr as $id){
 
-    $map['audio_set'] = setSingle($conn,$audio,$site);
-    $map['printer']   = setSingle($conn,$printer,$site);
-    $map['plotter']   = setSingle($conn,$plotter,$site);
-    $map['projector'] = setSingle($conn,$projector,$site);
+if(!$id) continue;
 
-    // ===== convert array to string =====
-    $cctv_str = implode(',', $map['cctv']);
-    $nvr_str  = implode(',', $map['nvr']);
+$q=$conn->prepare("SELECT no_pc FROM IT_assets WHERE asset_id=?");
+$q->execute([$id]);
+$row=$q->fetch(PDO::FETCH_ASSOC);
 
-    // ===== check exist project =====
-    $chk = $conn->prepare("SELECT COUNT(*) FROM IT_user_information WHERE user_project=?");
-    $chk->execute([$site]);
+if($row){
+$new_cctv[]=$row['no_pc'];
+}
 
-    if($chk->fetchColumn()>0){
-        $stmt = $conn->prepare("
-        UPDATE IT_user_information SET
-            user_cctv=?,
-            user_nvr=?,
-            user_audio_set=?,
-            user_printer=?,
-            user_plotter=?,
-            user_projector=?,
-            user_update=GETDATE()
-        WHERE user_project=?
-        ");
-        $stmt->execute([
-            $cctv_str,
-            $nvr_str,
-            $map['audio_set'],
-            $map['printer'],
-            $map['plotter'],
-            $map['projector'],
-            $site
-        ]);
-    }else{
-        $stmt = $conn->prepare("
-        INSERT INTO IT_user_information
-        (user_project,user_cctv,user_nvr,user_audio_set,user_printer,user_plotter,user_projector,user_update)
-        VALUES (?,?,?,?,?,?,?,GETDATE())
-        ");
-        $stmt->execute([
-            $site,
-            $cctv_str,
-            $nvr_str,
-            $map['audio_set'],
-            $map['printer'],
-            $map['plotter'],
-            $map['projector']
-        ]);
-    }
+}
 
-    header("Location: asset_shared_view.php?success=1");
-    exit;
+/* ================= NVR ================= */
+
+foreach($nvrArr as $id){
+
+if(!$id) continue;
+
+$q=$conn->prepare("SELECT no_pc FROM IT_assets WHERE asset_id=?");
+$q->execute([$id]);
+$row=$q->fetch(PDO::FETCH_ASSOC);
+
+if($row){
+$new_nvr[]=$row['no_pc'];
+}
+
+}
+
+/* ================= MERGE ================= */
+
+$final_cctv=array_unique(array_merge($old_cctv,$new_cctv));
+$final_nvr=array_unique(array_merge($old_nvr,$new_nvr));
+
+$cctv_str=implode(',',$final_cctv);
+$nvr_str=implode(',',$final_nvr);
+
+/* ================= SINGLE FUNCTION ================= */
+
+function setSingle($conn,$id,$site,$old){
+
+if(!$id) return $old;
+
+$q=$conn->prepare("SELECT no_pc FROM IT_assets WHERE asset_id=?");
+$q->execute([$id]);
+$row=$q->fetch(PDO::FETCH_ASSOC);
+
+if($row){
+return $row['no_pc'];
+}
+
+return $old;
+
+}
+
+$audio_pc=setSingle($conn,$audio_id,$site,$old_audio);
+$printer_pc=setSingle($conn,$printer_id,$site,$old_printer);
+$plotter_pc=setSingle($conn,$plotter_id,$site,$old_plotter);
+$projector_pc=setSingle($conn,$projector_id,$site,$old_projector);
+
+/* ================= DUPLICATE CHECK ================= */
+
+$checkDup=$conn->prepare("
+SELECT
+user_cctv,
+user_nvr,
+user_projector,
+user_printer,
+user_audio_set,
+user_plotter,
+user_Accessories_IT,
+user_Drone,
+user_Optical_Fiber,
+user_Server
+FROM IT_user_information
+WHERE user_project=?
+");
+
+$checkDup->execute([$site]);
+$rowDup=$checkDup->fetch(PDO::FETCH_ASSOC);
+
+$duplicate=[];
+
+if($rowDup){
+
+/* ===== CCTV ===== */
+
+if(!empty($rowDup['user_cctv'])){
+
+$exist=explode(',',$rowDup['user_cctv']);
+
+foreach($new_cctv as $v){
+if(in_array($v,$exist)) $duplicate[]=$v;
+}
+
+}
+
+/* ===== NVR ===== */
+
+if(!empty($rowDup['user_nvr'])){
+
+$exist=explode(',',$rowDup['user_nvr']);
+
+foreach($new_nvr as $v){
+if(in_array($v,$exist)) $duplicate[]=$v;
+}
+
+}
+
+/* ===== SINGLE EQUIPMENT ===== */
+
+if($audio_pc && $audio_pc==$rowDup['user_audio_set']) $duplicate[]=$audio_pc;
+if($printer_pc && $printer_pc==$rowDup['user_printer']) $duplicate[]=$printer_pc;
+if($plotter_pc && $plotter_pc==$rowDup['user_plotter']) $duplicate[]=$plotter_pc;
+if($projector_pc && $projector_pc==$rowDup['user_projector']) $duplicate[]=$projector_pc;
+
+if($old_accessories && $old_accessories==$rowDup['user_Accessories_IT']) $duplicate[]=$old_accessories;
+if($old_drone && $old_drone==$rowDup['user_Drone']) $duplicate[]=$old_drone;
+if($old_fiber && $old_fiber==$rowDup['user_Optical_Fiber']) $duplicate[]=$old_fiber;
+if($old_server && $old_server==$rowDup['user_Server']) $duplicate[]=$old_server;
+
+}
+
+if(!empty($duplicate)){
+
+$dupText=implode("<br>",$duplicate);
+
+echo "
+
+<script>
+
+document.addEventListener('DOMContentLoaded',function(){
+
+document.getElementById('dupText').innerHTML =
+'พบอุปกรณ์ถูกใช้งานแล้ว <br><b>$dupText</b>';
+
+let modal = new bootstrap.Modal(
+document.getElementById('duplicateModal')
+);
+
+modal.show();
+
+});
+
+</script>
+
+";
+
+exit;
+
+}
+
+/* ================= UPDATE ================= */
+
+$stmt=$conn->prepare("
+UPDATE IT_user_information SET
+
+user_cctv=?,
+user_nvr=?,
+user_projector=?,
+user_printer=?,
+user_Service_life=?,
+user_audio_set=?,
+user_plotter=?,
+user_Accessories_IT=?,
+user_Drone=?,
+user_Optical_Fiber=?,
+user_Server=?,
+user_update=GETDATE()
+
+WHERE user_project=?
+");
+
+$stmt->execute([
+
+$cctv_str,
+$nvr_str,
+$projector_pc,
+$printer_pc,
+$old_service,
+$audio_pc,
+$plotter_pc,
+$old_accessories,
+$old_drone,
+$old_fiber,
+$old_server,
+$site
+
+]);
+
+header("Location: asset_shared_view.php?success=1");
+exit;
+
 }
 
 include 'partials/header.php';
 include 'partials/sidebar.php';
 ?>
+
+<!-- SELECT2 -->
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0/dist/css/select2.min.css" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0/dist/js/select2.min.js"></script>
 
 <style>
 .card-header{background:linear-gradient(135deg,#198754,#20c997);color:white;}
@@ -174,35 +294,46 @@ include 'partials/sidebar.php';
 <!-- CCTV -->
 <div>
 <label>CCTV</label>
+
 <div id="cctvWrap">
-<select name="cctv[]" class="form-control mb-2">
+
+<select name="cctv[]" class="form-control select2 mb-2">
 <option value="">-- เลือก CCTV --</option>
 <?php foreach($cctv as $a): ?>
 <option value="<?= $a['asset_id'] ?>"><?= $a['no_pc'] ?></option>
 <?php endforeach; ?>
 </select>
+
 </div>
+
 <button type="button" onclick="addCCTV()" class="btn btn-sm btn-success">+ เพิ่ม</button>
+
 </div>
 
 <!-- NVR -->
 <div>
+
 <label>NVR</label>
+
 <div id="nvrWrap">
-<select name="nvr[]" class="form-control mb-2">
+
+<select name="nvr[]" class="form-control select2 mb-2">
 <option value="">-- เลือก NVR --</option>
 <?php foreach($nvr as $a): ?>
 <option value="<?= $a['asset_id'] ?>"><?= $a['no_pc'] ?></option>
 <?php endforeach; ?>
 </select>
+
 </div>
+
 <button type="button" onclick="addNVR()" class="btn btn-sm btn-success">+ เพิ่ม</button>
+
 </div>
 
 <!-- AUDIO -->
 <div>
 <label>Audio Set</label>
-<select name="audio_set" class="form-control">
+<select name="audio_set" class="form-control select2">
 <option value="">-- ไม่เลือก --</option>
 <?php foreach($audio as $a): ?>
 <option value="<?= $a['asset_id'] ?>"><?= $a['no_pc'] ?></option>
@@ -213,7 +344,7 @@ include 'partials/sidebar.php';
 <!-- PRINTER -->
 <div>
 <label>Printer</label>
-<select name="printer" class="form-control">
+<select name="printer" class="form-control select2">
 <option value="">-- ไม่เลือก --</option>
 <?php foreach($printer as $a): ?>
 <option value="<?= $a['asset_id'] ?>"><?= $a['no_pc'] ?></option>
@@ -224,7 +355,7 @@ include 'partials/sidebar.php';
 <!-- PLOTTER -->
 <div>
 <label>Plotter</label>
-<select name="plotter" class="form-control">
+<select name="plotter" class="form-control select2">
 <option value="">-- ไม่เลือก --</option>
 <?php foreach($plotter as $a): ?>
 <option value="<?= $a['asset_id'] ?>"><?= $a['no_pc'] ?></option>
@@ -235,7 +366,7 @@ include 'partials/sidebar.php';
 <!-- PROJECTOR -->
 <div>
 <label>Projector</label>
-<select name="projector" class="form-control">
+<select name="projector" class="form-control select2">
 <option value="">-- ไม่เลือก --</option>
 <?php foreach($projector as $a): ?>
 <option value="<?= $a['asset_id'] ?>"><?= $a['no_pc'] ?></option>
@@ -255,15 +386,48 @@ include 'partials/sidebar.php';
 </div>
 </div>
 
+<!-- ===== DUPLICATE MODAL ===== -->
+<div class="modal fade" id="duplicateModal" tabindex="-1">
+<div class="modal-dialog">
+<div class="modal-content">
+
+<div class="modal-header bg-success text-white">
+<h5 class="modal-title">พบอุปกรณ์ถูกใช้งานแล้ว</h5>
+</div>
+
+<div class="modal-body">
+<p id="dupText"></p>
+</div>
+
+<div class="modal-footer">
+<button class="btn btn-success" data-bs-dismiss="modal">ปิด</button>
+</div>
+
+</div>
+</div>
+</div>
+
 <script>
+
+$('.select2').select2({
+width:'100%',
+placeholder:'พิมพ์ค้นหา...',
+allowClear:true
+});
+
 function addCCTV(){
-    let el = document.querySelector('#cctvWrap select').cloneNode(true);
-    document.getElementById('cctvWrap').appendChild(el);
+let el=document.querySelector('#cctvWrap select').cloneNode(true);
+document.getElementById('cctvWrap').appendChild(el);
+$('.select2').select2();
 }
+
 function addNVR(){
-    let el = document.querySelector('#nvrWrap select').cloneNode(true);
-    document.getElementById('nvrWrap').appendChild(el);
+let el=document.querySelector('#nvrWrap select').cloneNode(true);
+document.getElementById('nvrWrap').appendChild(el);
+$('.select2').select2();
 }
+
 </script>
 
 <?php include 'partials/footer.php'; ?>
+

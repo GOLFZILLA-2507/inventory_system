@@ -231,11 +231,243 @@ $spec = $u['user_spec']." | ".$u['user_ram']." | ".$u['user_ssd']." | ".$u['user
 
 $j = 1;
 
-/* ================= กันข้อมูลซ้ำ 
+/* =====================================================
+   ตัวแปรเก็บอุปกรณ์ใช้ร่วมทั้งหมด
+===================================================== */
+
 $sharedData = [];
-$unique = [];================= */
+
+/* =====================================================
+   ตัวแปรกันข้อมูลซ้ำ
+   ใช้ key เป็น type + code
+===================================================== */
+
+$unique = [];
+
+
+/* =====================================================
+   loop ข้อมูลจากฐานทั้งหมด
+===================================================== */
 
 foreach($rows as $r){
+
+    /* ================= CCTV ================= */
+
+    if(!empty($r['user_cctv'])){
+
+        /* แยก CCTV ที่คั่นด้วย comma */
+        $cctvList = explode(',', $r['user_cctv']);
+
+        foreach($cctvList as $cctv){
+
+            $cctv = trim($cctv);
+
+            $key = 'CCTV-'.$cctv;
+
+            /* ตรวจสอบว่าซ้ำหรือไม่ */
+
+            if(!isset($unique[$key])){
+
+                $sharedData[] = [
+                    'type' => 'CCTV',
+                    'code' => $cctv
+                ];
+
+                $unique[$key] = true;
+            }
+        }
+    }
+
+
+
+    /* ================= NVR ================= */
+
+    if(!empty($r['user_nvr'])){
+
+        $code = trim($r['user_nvr']);
+
+        $key = 'NVR-'.$code;
+
+        if(!isset($unique[$key])){
+
+            $sharedData[] = [
+                'type'=>'NVR',
+                'code'=>$code
+            ];
+
+            $unique[$key] = true;
+        }
+    }
+
+
+
+    /* ================= Projector ================= */
+
+    if(!empty($r['user_projector'])){
+
+        $code = trim($r['user_projector']);
+
+        $key = 'Projector-'.$code;
+
+        if(!isset($unique[$key])){
+
+            $sharedData[] = [
+                'type'=>'Projector',
+                'code'=>$code
+            ];
+
+            $unique[$key] = true;
+        }
+    }
+
+
+
+    /* ================= Printer ================= */
+
+    if(!empty($r['user_printer'])){
+
+        $code = trim($r['user_printer']);
+
+        $key = 'Printer-'.$code;
+
+        if(!isset($unique[$key])){
+
+            $sharedData[] = [
+                'type'=>'Printer',
+                'code'=>$code
+            ];
+
+            $unique[$key] = true;
+        }
+    }
+
+
+
+    /* ================= Audio ================= */
+
+    if(!empty($r['user_audio_set'])){
+
+        $code = trim($r['user_audio_set']);
+
+        $key = 'Audio-'.$code;
+
+        if(!isset($unique[$key])){
+
+            $sharedData[] = [
+                'type'=>'Audio Set',
+                'code'=>$code
+            ];
+
+            $unique[$key] = true;
+        }
+    }
+
+
+
+    /* ================= Plotter ================= */
+
+    if(!empty($r['user_plotter'])){
+
+        $code = trim($r['user_plotter']);
+
+        $key = 'Plotter-'.$code;
+
+        if(!isset($unique[$key])){
+
+            $sharedData[] = [
+                'type'=>'Plotter',
+                'code'=>$code
+            ];
+
+            $unique[$key] = true;
+        }
+    }
+
+
+
+    /* ================= Accessories ================= */
+
+    if(!empty($r['user_Accessories_IT'])){
+
+        $code = trim($r['user_Accessories_IT']);
+
+        $key = 'ACC-'.$code;
+
+        if(!isset($unique[$key])){
+
+            $sharedData[] = [
+                'type'=>'Accessories IT',
+                'code'=>$code
+            ];
+
+            $unique[$key] = true;
+        }
+    }
+
+
+
+    /* ================= Drone ================= */
+
+    if(!empty($r['user_Drone'])){
+
+        $code = trim($r['user_Drone']);
+
+        $key = 'Drone-'.$code;
+
+        if(!isset($unique[$key])){
+
+            $sharedData[] = [
+                'type'=>'Drone',
+                'code'=>$code
+            ];
+
+            $unique[$key] = true;
+        }
+    }
+
+
+
+    /* ================= Fiber ================= */
+
+    if(!empty($r['user_Optical_Fiber'])){
+
+        $code = trim($r['user_Optical_Fiber']);
+
+        $key = 'Fiber-'.$code;
+
+        if(!isset($unique[$key])){
+
+            $sharedData[] = [
+                'type'=>'Optical Fiber',
+                'code'=>$code
+            ];
+
+            $unique[$key] = true;
+        }
+    }
+
+
+
+    /* ================= Server ================= */
+
+    if(!empty($r['user_Server'])){
+
+        $code = trim($r['user_Server']);
+
+        $key = 'Server-'.$code;
+
+        if(!isset($unique[$key])){
+
+            $sharedData[] = [
+                'type'=>'Server',
+                'code'=>$code
+            ];
+
+            $unique[$key] = true;
+        }
+    }
+
+}
 
 if(!empty($r['user_cctv'])){
 
@@ -333,7 +565,7 @@ if(!empty($r['user_cctv'])){
         }
     }
 
-}
+
 
 
 /* ================= แสดงผลในตาราง ================= */

@@ -129,12 +129,14 @@ data-spec="<?= $a['spec'].' | '.$a['ram'].' | '.$a['gpu'].' | '.$a['ssd'] ?>">
 <label class="label">อาการเสีย</label>
 <textarea name="problem" class="form-control mb-3" rows="4" required></textarea>
 
+<!--
 <label class="label">ความสำคัญ</label>
 <select name="priority" class="form-control mb-3">
 <option value="Low">🔵 ตามรอบ</option>
 <option value="Normal" selected>🟡 ปกติ</option>
 <option value="High">🔴 เร่งด่วน</option>
 </select>
+-->
 
 <label class="label">แนบรูป (เลือกได้สูงสุด 3 รูป)</label>
 <input type="file" name="images[]" id="imgInput" multiple class="form-control mb-2" accept="image/*">

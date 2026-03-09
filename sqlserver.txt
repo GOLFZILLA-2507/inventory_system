@@ -21,6 +21,8 @@ DBCC CHECKIDENT ('ชื่อฐานข้อมูล', RESEED, 0);
 UPDATE IT_assets
 SET project = N'สำนักงานใหญ่';
 ****************
+ีรีฐานรับ int 1ใหม่
+TRUNCATE TABLE IT_user_information;
 
 ****เช็ค FK***
 SELECT 
