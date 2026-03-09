@@ -1,3 +1,7 @@
+/* ================= กันข้อมูลซ้ำ 
+$sharedData = [];
+$unique = [];================= */
+
 ***เช็ค DEBUG***
 echo "<pre>";
 echo "USER NAME: ".$_SESSION['fullname']."\n";

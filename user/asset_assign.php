@@ -17,203 +17,275 @@ $employees = $employees->fetchAll(PDO::FETCH_ASSOC);
 
 /* ================= โหลดอุปกรณ์ ================= */
 function getAssets($conn,$types){
+
     $in  = str_repeat('?,', count($types) - 1) . '?';
-    $sql = "SELECT asset_id,no_pc,spec,ram,ssd,gpu FROM IT_assets WHERE type_equipment IN ($in) ORDER BY no_pc";
+
+    $sql = "
+    SELECT asset_id,no_pc,type_equipment,spec,ram,ssd,gpu
+    FROM IT_assets
+    WHERE type_equipment IN ($in)
+    ORDER BY no_pc
+    ";
+
     $stmt = $conn->prepare($sql);
     $stmt->execute($types);
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
+
 $computers = getAssets($conn,['PC','Notebook','All_In_One']);
 $monitors  = getAssets($conn,['Monitor']);
 $upsList   = getAssets($conn,['UPS']);
 
+
 /* ================= SUBMIT ================= */
+
 if(isset($_POST['submit'])){
 
-    $emp = $_POST['employee'];
-    $pos = $_POST['position'];
-    $asset_id = $_POST['asset_id'];
-    $pc       = $_POST['no_pc'];
-    $spec     = $_POST['spec'];
-    $ram      = $_POST['ram'];
-    $ssd      = $_POST['ssd'];
-    $gpu      = $_POST['gpu'];
-    $m1 = $_POST['monitor1'];
-    $m2 = $_POST['monitor2'] ?? null;
-    $ups= $_POST['ups'] ?? null;
-    $type_equipment = $_POST['type_equipment'];
+$emp  = $_POST['employee'] ?? null;
+$pos  = $_POST['position'] ?? null;
+$asset_id = $_POST['asset_id'] ?? null;
 
-    $equipment_details = $pc;
+$pc   = $_POST['no_pc'] ?? null;
+$spec = $_POST['spec'] ?? null;
+$ram  = $_POST['ram'] ?? null;
+$ssd  = $_POST['ssd'] ?? null;
+$gpu  = $_POST['gpu'] ?? null;
 
-    /* ================= USER INFO TABLE ================= */
+$m1  = $_POST['monitor1'] ?? null;
+$m2  = $_POST['monitor2'] ?? null;
+$ups = $_POST['ups'] ?? null;
 
-    $check = $conn->prepare("SELECT COUNT(*) FROM IT_user_information WHERE asset_id=?");
-    $check->execute([$asset_id]);
+$type_equipment = $_POST['type_equipment'] ?? null;
 
-    if($check->fetchColumn()>0){
+$equipment_details = $pc;
 
-        $stmt = $conn->prepare("
-        UPDATE IT_user_information SET
-            user_employee=?,
-            user_position=?,
-            user_project=?,
-            user_new_no=?,
-            user_no_pc=?,
-            user_equipment_details=?,
-            user_spec=?,
-            user_ssd=?,
-            user_ram=?,
-            user_gpu=?,
-            user_monitor1=?,
-            user_brand_1=NULL,
-            user_monitor2=?,
-            user_brand_2=NULL,
-            user_ups=?,
-            user_cctv=NULL,
-            user_nvr=NULL,
-            user_projector=NULL,
-            user_printer=NULL,
-            user_Service_life=NULL,
-            user_update=GETDATE(),
-            user_audio_set=NULL,
-            user_plotter=NULL,
-            user_Accessories_IT=NULL,
-            user_Drone=NULL,
-            user_Optical_Fiber=NULL,
-            user_Server=NULL
-            user_type_equipment=?
-        WHERE asset_id=?
-        ");
-            $stmt->execute([
-            $emp,                 // user_employee
-            $pos,                 // user_position
-            $site,                // user_project
-            $pc,                  // user_new_no
-            $pc,                  // user_no_pc
-            $equipment_details,   // user_equipment_details
-            $spec,                // user_spec
-            $ssd,                 // user_ssd
-            $ram,                 // user_ram
-            $gpu,                 // user_gpu
-            $m1,                  // user_monitor1
-            $m2,                  // user_monitor2
-            $ups,                 // user_ups
-            $type_equipment,      // user_type_equipment
-            $asset_id             // WHERE asset_id
-        ]);
 
-    }else{
+/* ===== CHECK EXIST ===== */
 
-        $stmt = $conn->prepare("
-        INSERT INTO IT_user_information
-        (
-            asset_id,
-            user_employee,
-            user_position,
-            user_project,
-            user_new_no,
-            user_no_pc,
-            user_equipment_details,
-            user_spec,
-            user_ssd,
-            user_ram,
-            user_gpu,
-            user_monitor1,
-            user_brand_1,
-            user_monitor2,
-            user_brand_2,
-            user_ups,
-            user_cctv,
-            user_nvr,
-            user_projector,
-            user_printer,
-            user_Service_life,
-            user_update,
-            user_audio_set,
-            user_plotter,
-            user_Accessories_IT,
-            user_Drone,
-            user_Optical_Fiber,
-            user_Server
-            user_type_equipment
-        )
-        VALUES
-        (
-            ?,?,?,?,?,?,?,?,?,?,
-            ?,NULL,?,NULL,?,
-            NULL,NULL,NULL,NULL,NULL,?,
-            GETDATE(),
-            NULL,NULL,NULL,NULL,NULL,NULL,NULL
-        )
-        ");
+$check = $conn->prepare("SELECT COUNT(*) FROM IT_user_information WHERE asset_id=?");
+$check->execute([$asset_id]);
+$exists = $check->fetchColumn();
 
-        $stmt->execute([
-            $asset_id,
-            $emp,
-            $pos,
-            $site,
-            $pc,
-            $pc,
-            $equipment_details,
-            $spec,
-            $ssd,
-            $ram,
-            $gpu,
-            $m1,
-            $m2,
-            $ups,
-            $type_equipment      // user_type_equipment
-        ]);
-    }
 
-/* ================= UPDATE กลับ IT_assets ================= */
-// อัปเดตเครื่องหลัก
-if(!empty($asset_id) && !empty($site)){
-    $updateAsset = $conn->prepare("
-    UPDATE IT_assets SET
-        project = ?,
-        [update] = GETDATE()
-    WHERE asset_id = ?
-    ");
-    $updateAsset->execute([$site,$asset_id]);
+
+/* ================= UPDATE ================= */
+
+if($exists){
+
+$stmt = $conn->prepare("
+
+UPDATE IT_user_information SET
+
+user_employee=?,
+user_position=?,
+user_project=?,
+
+user_new_no=?,
+user_no_pc=?,
+user_equipment_details=?,
+
+user_spec=?,
+user_ssd=?,
+user_ram=?,
+user_gpu=?,
+
+user_monitor1=?,
+user_brand_1=NULL,
+user_monitor2=?,
+user_brand_2=NULL,
+
+user_ups=?,
+user_cctv=NULL,
+user_nvr=NULL,
+user_projector=NULL,
+user_printer=NULL,
+
+user_Service_life=NULL,
+user_update=GETDATE(),
+
+user_audio_set=NULL,
+user_plotter=NULL,
+user_Accessories_IT=NULL,
+user_Drone=NULL,
+user_Optical_Fiber=NULL,
+user_Server=NULL,
+
+user_type_equipment=?
+
+WHERE asset_id=?
+
+");
+
+$stmt->execute([
+
+$emp,
+$pos,
+$site,
+
+$pc,
+$pc,
+$equipment_details,
+
+$spec,
+$ssd,
+$ram,
+$gpu,
+
+$m1,
+$m2,
+$ups,
+
+$type_equipment,
+
+$asset_id
+
+]);
+
 }
-// 🔥 อัปเดต Monitor 1
+
+
+/* ================= INSERT ================= */
+
+else{
+
+$stmt = $conn->prepare("
+
+INSERT INTO IT_user_information(
+
+asset_id,
+user_employee,
+user_position,
+user_project,
+
+user_new_no,
+user_no_pc,
+user_equipment_details,
+
+user_spec,
+user_ssd,
+user_ram,
+user_gpu,
+
+user_monitor1,
+user_brand_1,
+user_monitor2,
+user_brand_2,
+
+user_ups,
+user_cctv,
+user_nvr,
+user_projector,
+user_printer,
+
+user_Service_life,
+user_update,
+
+user_audio_set,
+user_plotter,
+user_Accessories_IT,
+user_Drone,
+user_Optical_Fiber,
+user_Server,
+
+user_type_equipment
+
+)
+
+VALUES(
+
+?, ?, ?, ?,
+?, ?, ?,
+?, ?, ?, ?,
+?, NULL, ?, NULL,
+?, NULL, NULL, NULL, NULL,
+NULL, GETDATE(),
+NULL, NULL, NULL, NULL, NULL, NULL,
+?
+
+)
+
+");
+
+$stmt->execute([
+
+$asset_id,
+$emp,
+$pos,
+$site,
+
+$pc,
+$pc,
+$equipment_details,
+
+$spec,
+$ssd,
+$ram,
+$gpu,
+
+$m1,
+$m2,
+
+$ups,
+
+$type_equipment
+
+]);
+
+}
+
+
+
+/* ================= UPDATE IT_assets ================= */
+
+if(!empty($asset_id)){
+
+$conn->prepare("
+UPDATE IT_assets
+SET project=?, [update]=GETDATE()
+WHERE asset_id=?
+")->execute([$site,$asset_id]);
+
+}
+
 if(!empty($m1)){
-    $updateMonitor1 = $conn->prepare("
-    UPDATE IT_assets SET
-        project = ?,
-        [update] = GETDATE()
-    WHERE no_pc = ?
-    ");
-    $updateMonitor1->execute([$site,$m1]);
-}
-// 🔥 อัปเดต Monitor 2
-if(!empty($m2)){
-    $updateMonitor2 = $conn->prepare("
-    UPDATE IT_assets SET
-        project = ?,
-        [update] = GETDATE()
-    WHERE no_pc = ?
-    ");
-    $updateMonitor2->execute([$site,$m2]);
-}
-// 🔥 อัปเดต UPS
-if(!empty($ups)){
-    $updateUPS = $conn->prepare("
-    UPDATE IT_assets SET
-        project = ?,
-        [update] = GETDATE()
-    WHERE no_pc = ?
-    ");
-    $updateUPS->execute([$site,$ups]);
+
+$conn->prepare("
+UPDATE IT_assets
+SET project=?, [update]=GETDATE()
+WHERE no_pc=?
+")->execute([$site,$m1]);
+
 }
 
-    header("Location: asset_shared_view.php?success=1");
-    exit;
+if(!empty($m2)){
+
+$conn->prepare("
+UPDATE IT_assets
+SET project=?, [update]=GETDATE()
+WHERE no_pc=?
+")->execute([$site,$m2]);
+
+}
+
+if(!empty($ups)){
+
+$conn->prepare("
+UPDATE IT_assets
+SET project=?, [update]=GETDATE()
+WHERE no_pc=?
+")->execute([$site,$ups]);
+
+}
+
+
+header("Location: asset_shared_view.php?success=1");
+exit;
+
 }
 
 include 'partials/header.php';
 include 'partials/sidebar.php';
+
 ?>
 
 <style>
@@ -264,7 +336,8 @@ data-pc="<?= $c['no_pc'] ?>"
 data-spec="<?= $c['spec'] ?>"
 data-ram="<?= $c['ram'] ?>"
 data-ssd="<?= $c['ssd'] ?>"
-data-gpu="<?= $c['gpu'] ?>">
+data-gpu="<?= $c['gpu'] ?>"
+data-type="<?= $c['type_equipment'] ?>">
 <?= $c['no_pc'] ?>
 </option>
 <?php endforeach; ?>
@@ -272,13 +345,11 @@ data-gpu="<?= $c['gpu'] ?>">
 
 <input type="text" id="no_pc" name="no_pc" class="form-control mb-2" readonly>
 <input type="text" id="spec_full" class="form-control mb-2" readonly>
-
 <input type="hidden" name="spec" id="spec">
 <input type="hidden" name="ram" id="ram">
 <input type="hidden" name="ssd" id="ssd">
 <input type="hidden" name="gpu" id="gpu">
-</div>
-
+<input type="hidden" name="type_equipment" id="type_equipment">
 </div>
 
 <hr>
@@ -340,14 +411,15 @@ let spec = opt.getAttribute('data-spec')||'';
 let ram = opt.getAttribute('data-ram')||'';
 let ssd = opt.getAttribute('data-ssd')||'';
 let gpu = opt.getAttribute('data-gpu')||'';
+let type = opt.getAttribute('data-type')||'';
 
 document.getElementById('no_pc').value = pc;
 document.getElementById('spec_full').value = spec+" | RAM "+ram+" | SSD "+ssd+" | GPU "+gpu;
-
 document.getElementById('spec').value = spec;
 document.getElementById('ram').value = ram;
 document.getElementById('ssd').value = ssd;
 document.getElementById('gpu').value = gpu;
+document.getElementById('type_equipment').value = type;
 });
 </script>
 
