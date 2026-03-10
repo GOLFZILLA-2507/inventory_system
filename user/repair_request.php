@@ -3,27 +3,12 @@ session_start();
 
 require_once '../config/connect.php';
 
-require_once '../config/checklogin.php';
-
-
 $userProject = $_SESSION['site'];
 
 
 /* ======================================================
    SUBMIT แจ้งซ่อม (ต้องอยู่ก่อน include header)
 ====================================================== */
-
-/* ================= โหลด asset เฉพาะ project ของ user ================= */
-$stmt = $conn->prepare("
-SELECT asset_id, no_pc, new_no, spec, ram, gpu, ssd
-FROM IT_assets
-WHERE project = ?
-ORDER BY no_pc
-");
-$stmt->execute([$userProject]);
-$assets = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-
 
 if(isset($_POST['submit'])){
 
@@ -48,7 +33,6 @@ move_uploaded_file($_FILES['images']['tmp_name'][$i],$uploadDir.$filename);
 if($i==0) $img1=$filename;
 if($i==1) $img2=$filename;
 if($i==2) $img3=$filename;
-
 
 }
 
@@ -81,7 +65,7 @@ $_POST['user_type_equipment'] ?? '',
 $userProject
 ]);
 
-header("Location: repair_request.php?success=1");
+header("Location: repair_status.php?success=1");
 exit;
 
 }
@@ -189,12 +173,6 @@ $assets[]=['asset_id'=>$row['user_Server'],'user_no_pc'=>$row['user_Server'],'us
 
 }
 
-
-    header("Location: repair_status.php?success=1");
-    exit;
-
-
-
 include 'partials/header.php';
 include 'partials/sidebar.php';
 ?>
@@ -234,7 +212,6 @@ border:1px solid #ddd;
 }
 
 </style>
-
 
 <div class="container mt-4">
 
@@ -289,7 +266,7 @@ data-spec="<?= ($a['user_spec'] ?? '').' | '.($a['user_ram'] ?? '').' | '.($a['u
 
 <textarea id="spec" class="form-control readonly mb-3" rows="3" readonly></textarea>
 
-
+<!--
 <label class="label">ระดับความเร่งด่วน</label>
 
 <select name="priority" class="form-control mb-3">
@@ -300,6 +277,7 @@ data-spec="<?= ($a['user_spec'] ?? '').' | '.($a['user_ram'] ?? '').' | '.($a['u
 <option value="Urgent">Urgent</option>
 
 </select>
+-->
 
 </div>
 
@@ -313,16 +291,6 @@ data-spec="<?= ($a['user_spec'] ?? '').' | '.($a['user_ram'] ?? '').' | '.($a['u
 <label class="label">อาการเสีย</label>
 
 <textarea name="problem" class="form-control mb-3" rows="4" required></textarea>
-
-
-<!--
-<label class="label">ความสำคัญ</label>
-<select name="priority" class="form-control mb-3">
-<option value="Low">🔵 ตามรอบ</option>
-<option value="Normal" selected>🟡 ปกติ</option>
-<option value="High">🔴 เร่งด่วน</option>
-</select>
--->
 
 
 <label class="label">แนบรูป (สูงสุด 3 รูป)</label>
