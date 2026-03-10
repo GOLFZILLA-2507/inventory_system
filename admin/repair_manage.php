@@ -2,6 +2,7 @@
 require_once '../config/connect.php';
 require_once '../config/checklogin.php';
 
+
 /* ================= UPDATE STATUS ================= */
 if(isset($_POST['update_status'])){
     $stmt = $conn->prepare("
@@ -105,7 +106,7 @@ body{font-family:'Sarabun';font-size:14px;}
 <div class="col-md-3">
 <select id="statusFilter" class="form-control">
 <option value="">-- ทุกสถานะ --</option>
-<option value="รอดำเนินการ">🟡 รอดำเนินการ</option>
+<option value="รอรับเรื่อง">🟡 รอรับเรื่อง</option>
 <option value="กำลังซ่อม">🟠 กำลังซ่อม</option>
 <option value="เสร็จแล้ว">🟢 เสร็จแล้ว</option>
 </select>
@@ -226,7 +227,7 @@ if(!empty($r["img$i2"])): ?>
 <div class="col-md-4 mb-2">
 <label>สถานะ</label>
 <select name="status" class="form-control">
-<option <?= $r['status']=='รอดำเนินการ'?'selected':'' ?>>รอดำเนินการ</option>
+<option <?= $r['status']=='รอรับเรื่อง'?'selected':'' ?>>รอรับเรื่อง</option>
 <option <?= $r['status']=='กำลังซ่อม'?'selected':'' ?>>กำลังซ่อม</option>
 <option <?= $r['status']=='เสร็จแล้ว'?'selected':'' ?>>เสร็จแล้ว</option>
 </select>

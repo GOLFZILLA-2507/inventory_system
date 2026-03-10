@@ -152,6 +152,7 @@ user_Drone=NULL,
 user_Optical_Fiber=NULL,
 user_Server=NULL,
 
+user_record=?,
 user_type_equipment=?
 
 WHERE asset_id=?
@@ -177,6 +178,7 @@ $m1,
 $m2,
 $ups,
 
+$user,
 $type_equipment,
 
 $asset_id
@@ -228,7 +230,8 @@ user_Drone,
 user_Optical_Fiber,
 user_Server,
 
-user_type_equipment
+user_type_equipment,
+user_record
 
 )
 
@@ -241,7 +244,7 @@ VALUES(
 ?, NULL, NULL, NULL, NULL,
 NULL, GETDATE(),
 NULL, NULL, NULL, NULL, NULL, NULL,
-?
+?,?
 
 )
 
@@ -268,7 +271,8 @@ $m2,
 
 $ups,
 
-$type_equipment
+$type_equipment,
+$user
 
 ]);
 

@@ -23,6 +23,10 @@ SET project = N'สำนักงานใหญ่';
 ****************
 ีรีฐานรับ int 1ใหม่
 TRUNCATE TABLE IT_user_information;
+***********************************
+DELETE FROM IT_AssetTransfer_Headers;
+DBCC CHECKIDENT ('IT_AssetTransfer_Headers', RESEED, 0);
+***************************************
 
 ****เช็ค FK***
 SELECT 
