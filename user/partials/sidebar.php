@@ -95,12 +95,6 @@
 
                         <li>
                             <a class="dropdown-item" href="transfer_receive.php">
-                                📥 รายการรอรับ
-                            </a>
-                        </li>
-
-                        <li>
-                            <a class="dropdown-item" href="transfer_receive.php">
                                 ✔️ ตรวจรับอุปกรณ์
                             </a>
                         </li>
