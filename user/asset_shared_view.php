@@ -278,26 +278,57 @@ foreach($rows as $r){
         }
     }
 
-
-
     /* ================= NVR ================= */
 
     if(!empty($r['user_nvr'])){
 
-        $code = trim($r['user_nvr']);
+        /* แยก NVR ที่คั่นด้วย comma */
+        $nvrList = explode(',', $r['user_nvr']);
 
-        $key = 'NVR-'.$code;
+        foreach($nvrList as $nvr){
 
-        if(!isset($unique[$key])){
+            $nvr = trim($nvr);
 
-            $sharedData[] = [
-                'type'=>'NVR',
-                'code'=>$code
-            ];
+            $key = 'NVR-'.$nvr;
 
-            $unique[$key] = true;
+            /* ตรวจสอบว่าซ้ำหรือไม่ */
+
+            if(!isset($unique[$key])){
+
+                $sharedData[] = [
+                    'type' => 'NVR',
+                    'code' => $nvr
+                ];
+
+                $unique[$key] = true;
+            }
+        }
+     }
+
+
+
+
+    /* ================= Projector ================= */
+
+    if(!empty($r['user_projector'])){
+
+        $code = trim($r['user_projector']);
+
+        $key = 'Projector-'.$code;
+
+            if(!isset($unique[$key])){
+
+                $sharedData[] = [
+                    'type' => 'CCTV',
+                    'code' => $cctv
+                ];
+
+                $unique[$key] = true;
+            }
         }
     }
+
+
 
 
 
@@ -467,7 +498,7 @@ foreach($rows as $r){
         }
     }
 
-}
+
 
 if(!empty($r['user_cctv'])){
 
@@ -492,14 +523,19 @@ if(!empty($r['user_cctv'])){
 
     }
 }
-
+    /* แยก NVR ที่คั่นด้วย comma */
     if(!empty($r['user_nvr'])){
-        $key = 'NVR-'.$r['user_nvr'];
-        if(!isset($unique[$key])){
-            $sharedData[] = ['type'=>'NVR','code'=>$r['user_nvr']];
-            $unique[$key] = true;
+        $nvrList = explode(',', $r['user_nvr']);
+        foreach($nvrList as $nvr){
+            $nvr = trim($nvr);
+            $key = 'NVR-'.$nvr;
+            if(!isset($unique[$key])){
+                $sharedData[] = ['type'=>'NVR','code'=>$nvr];
+                $unique[$key] = true;
+            }
         }
     }
+    
 
     if(!empty($r['user_projector'])){
         $key = 'Projector-'.$r['user_projector'];

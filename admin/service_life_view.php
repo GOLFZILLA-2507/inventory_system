@@ -235,7 +235,7 @@ body{font-family:'Sarabun';font-size:14px;background:#eef6ff;}
 <th>ปีใช้งาน</th>
 <th>วัดค่า</th>
 <th>รายละเอียด</th>
-<th>ซ่อม</th>
+<!--<th>ซ่อม</th>-->
 <th>บันทึก</th>
 </tr>
 </thead>
@@ -254,7 +254,7 @@ if(empty($row['yfm_2'])){
 elseif((int)$age < 4){
     $grade = "<span class='badge bg-success'>A - ใช้งานได้ดี</span>";
 }
-elseif((int)$age <= 8){
+elseif((int)$age <= 7){
     $grade = "<span class='badge bg-warning text-dark'>B - พอใช้</span>";
 }
 else{
@@ -305,12 +305,13 @@ else{
         data-bs-toggle="modal"
         data-bs-target="#detail<?= $i ?>">ดู</button>
 </td>
-
+<!-- 
 <td>
 <button type="button" class="btn btn-warning btn-sm"
         data-bs-toggle="modal"
         data-bs-target="#repair<?= $i ?>">ดู</button>
-</td>
+</td> 
+-->
 
 </form>
 
@@ -415,6 +416,11 @@ else{
 <div class="detail-box">
 <label>มูลค่าเครื่อง</label>
 <div class="price"><?= number_format($row['machine_value']) ?> บาท</div>
+</div>
+
+<div class="detail-box">
+<b><label>วัดค่า</label></b>
+<div class="#"><?= $grade ?></div>
 </div>
 
 </div>

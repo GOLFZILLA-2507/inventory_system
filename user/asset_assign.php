@@ -39,7 +39,7 @@ $upsList   = getAssets($conn,['UPS']);
 /* ================= SUBMIT ================= */
 
 if(isset($_POST['submit'])){
-
+    
 $emp  = $_POST['employee'] ?? null;
 $pos  = $_POST['position'] ?? null;
 $asset_id = $_POST['asset_id'] ?? null;
@@ -53,6 +53,7 @@ $gpu  = $_POST['gpu'] ?? null;
 $m1  = $_POST['monitor1'] ?? null;
 $m2  = $_POST['monitor2'] ?? null;
 $ups = $_POST['ups'] ?? null;
+$use_it = $_POST['use_it'] ?? null;
 
 $type_equipment = $_POST['type_equipment'] ?? null;
 
@@ -85,10 +86,15 @@ $dup->execute([$site]);
 while($row = $dup->fetch(PDO::FETCH_ASSOC)){
 
 if(
-$row['user_no_pc']==$pc ||
-$row['user_monitor1']==$m1 ||
-$row['user_monitor2']==$m2 ||
-$row['user_ups']==$ups
+
+(!empty($pc) && $row['user_no_pc'] == $pc) ||
+
+(!empty($m1) && $row['user_monitor1'] == $m1) ||
+
+(!empty($m2) && $row['user_monitor2'] == $m2) ||
+
+(!empty($ups) && $row['user_ups'] == $ups)
+
 ){
 
 echo "<script>
@@ -177,6 +183,7 @@ $gpu,
 $m1,
 $m2,
 $ups,
+$use_it,
 
 $user,
 $type_equipment,
@@ -270,6 +277,7 @@ $m1,
 $m2,
 
 $ups,
+$use_it,
 
 $type_equipment,
 $user
@@ -318,6 +326,16 @@ UPDATE IT_assets
 SET project=?, [update]=GETDATE()
 WHERE no_pc=?
 ")->execute([$site,$ups]);
+
+}
+
+if(!empty($asset_id)){
+
+$conn->prepare("
+UPDATE IT_assets
+SET use_it=?, [update]=GETDATE()
+WHERE asset_id=?
+")->execute([$emp,$asset_id]);
 
 }
 

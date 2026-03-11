@@ -23,19 +23,52 @@ $nvr        = getByType($conn,'NVR');
 $printer    = getByType($conn,'Printer');
 $plotter    = getByType($conn,'Plotter');
 $projector  = getByType($conn,'Projector');
-
+$accessories  = getByType($conn,'Accessories_IT');
+$drone        = getByType($conn,'Drone');
+$fiber        = getByType($conn,'Optical_Fiber');
+$server       = getByType($conn,'Server');
 
 /* ================= SUBMIT ================= */
 
 if(isset($_POST['submit'])){
 
-$cctvArr = $_POST['cctv'] ?? [];
-$nvrArr  = $_POST['nvr'] ?? [];
+    // collect submitted asset ids
+    $cctvArr = $_POST['cctv'] ?? [];
+    $nvrArr  = $_POST['nvr'] ?? [];
 
-$audio_id     = $_POST['audio_set'] ?? null;
-$printer_id   = $_POST['printer'] ?? null;
-$plotter_id   = $_POST['plotter'] ?? null;
-$projector_id = $_POST['projector'] ?? null;
+    $audio_id     = $_POST['audio_set'] ?? null;
+    $printer_id   = $_POST['printer'] ?? null;
+    $plotter_id   = $_POST['plotter'] ?? null;
+    $projector_id = $_POST['projector'] ?? null;
+    $accessories_id = $_POST['accessories'] ?? null;
+    $drone_id       = $_POST['drone'] ?? null;
+    $fiber_id       = $_POST['fiber'] ?? null;
+    $server_id      = $_POST['server'] ?? null;
+
+    // === VALIDATION: avoid duplicate or already-used assets ===
+    $allIds = array_filter(array_merge(
+        $cctvArr,
+        $nvrArr,
+        [$audio_id, $printer_id, $plotter_id, $projector_id, $accessories_id, $drone_id, $fiber_id, $server_id]
+    ));
+
+    // check for repeated selections in the form
+    if(count($allIds) !== count(array_unique($allIds))){
+        header("Location: asset_shared_add.php?error=".urlencode('มีอุปกรณ์ถูกเลือกซ้ำ'));
+        exit;
+    }
+
+    // check each asset to ensure it's not assigned elsewhere
+    foreach($allIds as $aid){
+        $q=$conn->prepare("SELECT project,no_pc FROM IT_assets WHERE asset_id=?");
+        $q->execute([$aid]);
+        $row=$q->fetch(PDO::FETCH_ASSOC);
+        if($row && $row['project'] && $row['project'] !== $site){
+            header("Location: asset_shared_add.php?error=".urlencode('อุปกรณ์ '.htmlspecialchars($row['no_pc']).' ถูกใช้งานโดยโครงการ '.htmlspecialchars($row['project']).''));
+            exit;
+        }
+    }
+
 
 
 /* ================= โหลดค่าปัจจุบัน ================= */
@@ -65,6 +98,44 @@ $old_fiber       = $current['user_Optical_Fiber'] ?? null;
 $old_server      = $current['user_Server'] ?? null;
 $old_service     = $current['user_Service_life'] ?? null;
 
+    // convert old assigned equipment (stored as no_pc) back to asset_id for duplicate checks
+    $oldIds = [];
+    $convertStmt = $conn->prepare("SELECT asset_id FROM IT_assets WHERE no_pc=?");
+    foreach($old_cctv as $no){
+        if($no){
+            $convertStmt->execute([$no]);
+            if($r=$convertStmt->fetch(PDO::FETCH_ASSOC)){
+                $oldIds[] = $r['asset_id'];
+            }
+        }
+    }
+    foreach($old_nvr as $no){
+        if($no){
+            $convertStmt->execute([$no]);
+            if($r=$convertStmt->fetch(PDO::FETCH_ASSOC)){
+                $oldIds[] = $r['asset_id'];
+            }
+        }
+    }
+    $singleOld = [$old_audio, $old_printer, $old_plotter, $old_projector, $old_accessories, $old_drone, $old_fiber, $old_server];
+    foreach($singleOld as $no){
+        if($no){
+            $convertStmt->execute([$no]);
+            if($r=$convertStmt->fetch(PDO::FETCH_ASSOC)){
+                $oldIds[] = $r['asset_id'];
+            }
+        }
+    }
+
+    // validation against previously assigned assets for this site
+    if(!empty($allIds)){
+        foreach($allIds as $aid){
+            if(in_array($aid, $oldIds)){
+                header("Location: asset_shared_add.php?error=".urlencode('อุปกรณ์ ID:'.$aid.' มีการบันทึกไว้ก่อนหน้าแล้ว'));
+                exit;
+            }
+        }
+    }
 
 /* ================= NEW ARRAY ================= */
 
@@ -162,6 +233,10 @@ $audio_pc=setSingle($conn,$audio_id,$site,$old_audio);
 $printer_pc=setSingle($conn,$printer_id,$site,$old_printer);
 $plotter_pc=setSingle($conn,$plotter_id,$site,$old_plotter);
 $projector_pc=setSingle($conn,$projector_id,$site,$old_projector);
+$accessories_pc=setSingle($conn,$accessories_id,$site,$old_accessories);
+$drone_pc=setSingle($conn,$drone_id,$site,$old_drone);
+$fiber_pc=setSingle($conn,$fiber_id,$site,$old_fiber);
+$server_pc=setSingle($conn,$server_id,$site,$old_server);
 
 
 /* ================= UPDATE ================= */
@@ -194,10 +269,10 @@ $printer_pc,
 $old_service,
 $audio_pc,
 $plotter_pc,
-$old_accessories,
-$old_drone,
-$old_fiber,
-$old_server,
+$accessories_pc,
+$drone_pc,
+$fiber_pc,
+$server_pc,
 $site
 
 ]);
@@ -230,6 +305,10 @@ include 'partials/sidebar.php';
 </div>
 
 <div class="card-body">
+
+<?php if(isset($_GET['error'])): ?>
+<div class="alert alert-danger"><?php echo htmlspecialchars($_GET['error']); ?></div>
+<?php endif; ?>
 
 <form method="post" onsubmit="return confirm('ยืนยันการบันทึกอุปกรณ์ใช้ร่วม ?')">
 
@@ -303,6 +382,7 @@ include 'partials/sidebar.php';
 
 
 <!-- PRINTER -->
+ <div>
 <div>
 <label>Printer</label>
 <select name="printer" class="form-control select2">
@@ -312,7 +392,8 @@ include 'partials/sidebar.php';
 <?php endforeach; ?>
 </select>
 </div>
-
+<button type="button" onclick="addPrinter()" class="btn btn-sm btn-success">+ เพิ่ม</button>
+</div>
 
 <!-- PLOTTER -->
 <div>
@@ -337,6 +418,50 @@ include 'partials/sidebar.php';
 </select>
 </div>
 
+<!-- Accessories IT -->
+<div>
+<label>Accessories IT</label>
+<select name="accessories" class="form-control select2">
+<option value="">-- ไม่เลือก --</option>
+<?php foreach($accessories as $a): ?>
+<option value="<?= $a['asset_id'] ?>"><?= $a['no_pc'] ?></option>
+<?php endforeach; ?>
+</select>
+</div>
+
+<!-- Drone -->
+<div>
+<label>Drone</label>
+<select name="drone" class="form-control select2">
+<option value="">-- ไม่เลือก --</option>
+<?php foreach($drone as $a): ?>
+<option value="<?= $a['asset_id'] ?>"><?= $a['no_pc'] ?></option>
+<?php endforeach; ?>
+</select>
+</div>
+
+<!-- Optical Fiber -->
+<div>
+<label>Optical Fiber</label>
+<select name="fiber" class="form-control select2">
+<option value="">-- ไม่เลือก --</option>
+<?php foreach($fiber as $a): ?>
+<option value="<?= $a['asset_id'] ?>"><?= $a['no_pc'] ?></option>
+<?php endforeach; ?>
+</select>
+</div>
+
+<!-- Server -->
+<div>
+<label>Server</label>
+<select name="server" class="form-control select2">
+<option value="">-- ไม่เลือก --</option>
+<?php foreach($server as $a): ?>
+<option value="<?= $a['asset_id'] ?>"><?= $a['no_pc'] ?></option>
+<?php endforeach; ?>
+</select>
+</div>
+
 
 </div>
 
@@ -352,22 +477,30 @@ include 'partials/sidebar.php';
 
 
 <script>
-
-$('.select2').select2({
-width:'100%',
-placeholder:'พิมพ์ค้นหา...',
-allowClear:true
-});
-
 function addCCTV(){
-let el=document.querySelector('#cctvWrap select').cloneNode(true);
-document.getElementById('cctvWrap').appendChild(el);
+let wrap=document.getElementById('cctvWrap');
+let select=wrap.querySelector('select');
+let newSelect=select.cloneNode(true);
+newSelect.value='';
+wrap.appendChild(newSelect);
 $('.select2').select2();
 }
 
 function addNVR(){
-let el=document.querySelector('#nvrWrap select').cloneNode(true);
-document.getElementById('nvrWrap').appendChild(el);
+let wrap=document.getElementById('nvrWrap');
+let select=wrap.querySelector('select');
+let newSelect=select.cloneNode(true);
+newSelect.value='';
+wrap.appendChild(newSelect);
+$('.select2').select2();
+}
+
+function addPrinter(){
+let wrap=document.querySelector('select[name="printer"]').parentElement;
+let select=wrap.querySelector('select');
+let newSelect=select.cloneNode(true);
+newSelect.value='';
+wrap.appendChild(newSelect);
 $('.select2').select2();
 }
 
