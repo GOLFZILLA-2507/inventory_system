@@ -13,6 +13,7 @@ $emp  = $_SESSION['EmployeeID'];
 
 if(isset($_POST['receive'])){
 
+
 $tid = $_POST['transfer_id'];
 
 /* ดึงข้อมูล transfer */
@@ -65,29 +66,29 @@ $stmt->execute();
 $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
 /* สร้าง asset_id ใหม่ */
-$new_asset_id = $row['max_id'] + 1;
+$new_asset_id = ($row['max_id'] ?? 0) + 1;
 
 
 /* เตรียมคำสั่ง INSERT แถวใหม่ */
 $stmt = $conn->prepare("
 INSERT INTO IT_user_information
 (
-asset_id,              -- รหัส asset ใหม่
-user_employee,         -- ผู้ใช้เครื่อง
-user_project,          -- โครงการใหม่
-user_new_no,           -- รหัสยาว
-user_no_pc,            -- รหัสเครื่อง
-user_equipment_details,-- รายละเอียด
-user_spec,             -- spec
-user_ssd,              -- ssd
-user_ram,              -- ram
-user_gpu,              -- gpu
-user_type_equipment,   -- ประเภท
-user_record,           -- ผู้บันทึก
-user_update            -- วันที่บันทึก
+asset_id,
+user_employee,
+user_project,
+user_new_no,
+user_no_pc,
+user_equipment_details,
+user_spec,
+user_ssd,
+user_ram,
+user_gpu,
+user_type_equipment,
+user_record,
+user_update
 )
 VALUES
-(?,?,?,?,?,?,?,?,?,?,?, ?,GETDATE())
+(?,?,?,?,?,?,?,?,?,?,?,?,GETDATE())
 ");
 
 /* execute insert */
@@ -104,10 +105,50 @@ $t['ssd'],       // ssd
 $t['ram'],       // ram
 $t['gpu'],       // gpu
 $t['type'],      // ประเภท
-$user            // ผู้บันทึก
+$user,            // ผู้บันทึก
 
 ]);
 }
+
+/* =========================================
+   4 อัพเดทเครื่องต้นทาง
+   หาเครื่องจากทุก field ที่อาจเก็บรหัสอุปกรณ์
+========================================= */
+
+$stmt = $conn->prepare("
+UPDATE IT_user_information
+SET 
+status_tranfer = ?,   -- ประเภทการโอน เช่น โอนย้าย
+no_transfer = ?       -- เก็บรหัสเครื่องที่ถูกโอน
+WHERE
+(
+user_no_pc = ?
+OR user_monitor1 = ?
+OR user_monitor2 = ?
+OR user_ups = ?
+OR user_cctv = ?
+OR user_nvr = ?
+OR user_projector = ?
+OR user_printer = ?
+)
+AND user_project <> ?
+");
+
+$stmt->execute([
+$t['transfer_type'],
+$t['no_pc'],
+
+$t['no_pc'],
+$t['no_pc'],
+$t['no_pc'],
+$t['no_pc'],
+$t['no_pc'],
+$t['no_pc'],
+$t['no_pc'],
+$t['no_pc'],
+
+$site
+]);
 
 header("Location: transfer_receive.php");
 exit;

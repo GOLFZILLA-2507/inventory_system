@@ -37,7 +37,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             else{
                 echo "Hi Welcome Back user<br />";   
-                echo "<script>window.location='user/index.php'; </script>";
+                echo "<script>window.location='user/asset_shared_view.php'; </script>";
             }
             exit();
         }

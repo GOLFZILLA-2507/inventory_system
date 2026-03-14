@@ -2,7 +2,7 @@
     <div class="container-fluid">
 
         <!-- LOGO -->
-        <a class="navbar-brand" href="index.php">
+        <a class="navbar-brand" href="asset_shared_view.php">
             🏢 Inventory System
         </a>
 
@@ -18,7 +18,7 @@
 
                 <!-- ================= HOME ================= -->
                 <li class="nav-item">
-                    <a class="nav-link" href="index.php">
+                    <a class="nav-link" href="asset_shared_view.php">
                         🏠 หน้าหลัก
                     </a>
                 </li>
