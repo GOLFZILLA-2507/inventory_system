@@ -24,6 +24,7 @@ function getAssets($conn,$types){
     SELECT asset_id,no_pc,new_no,Equipment_details,type_equipment,spec,ram,ssd,gpu
     FROM IT_assets
     WHERE type_equipment IN ($in)
+    AND (use_it IS NULL OR use_it = '')
     ORDER BY no_pc
     ";
 
@@ -72,38 +73,77 @@ $new_no = $assetRow['new_no'] ?? null;
 $equipment_details = $assetRow['Equipment_details'] ?? null;
 
 
+/* ===== CHECK EXIST ===== */
+
+$check = $conn->prepare("SELECT COUNT(*) FROM IT_user_information WHERE asset_id=?");
+$check->execute([$asset_id]);
+$exists = $check->fetchColumn();
+
 /* ===== CHECK DUPLICATE ===== */
 
-$dup = $conn->prepare("
-SELECT user_employee,user_no_pc,user_monitor1,user_monitor2,user_ups
+// Prevent duplicate assignments within the same project (site).
+// This checks against existing records for the same project and reports which fields are duplicated.
+$dupSql = "
+SELECT asset_id,user_employee,user_new_no,user_no_pc,user_monitor1,user_monitor2,user_ups
 FROM IT_user_information
 WHERE user_project = ?
-");
+AND (
+    asset_id = ?
+    OR user_employee = ?
+    OR user_new_no = ?
+    OR user_no_pc = ?
+    OR user_monitor1 = ?
+    OR user_monitor2 = NULL
+    OR user_ups = NULL
+)";
 
-$dup->execute([$site]);
-
-while($row = $dup->fetch(PDO::FETCH_ASSOC)){
-
-if(
-$row['user_no_pc']==$pc ||
-$row['user_monitor1']==$m1 ||
-$row['user_monitor2']==$m2 ||
-$row['user_ups']==$ups
-){
-
-echo "<script>
-alert('อุปกรณ์นี้มีผู้ใช้งานแล้ว : ".$row['user_employee']."');
-window.history.back();
-</script>";
-
-exit;
-
+// When updating an existing assignment, ignore the current record so it doesn't self-match.
+if ($exists) {
+    $dupSql .= "\nAND asset_id <> ?";
 }
 
+$dup = $conn->prepare($dupSql);
+$params = [$site, $asset_id, $emp, $new_no, $pc, $m1, $m2, $ups];
+if ($exists) {
+    $params[] = $asset_id;
+}
+
+$dup->execute($params);
+
+$duplicateFields = [];
+while ($row = $dup->fetch(PDO::FETCH_ASSOC)) {
+    if ($row['asset_id'] == $asset_id) {
+        $duplicateFields[] = 'Asset ID';
+    }
+    if ($row['user_employee'] == $emp) {
+        $duplicateFields[] = 'พนักงาน (Employee)';
+    }
+    if ($row['user_new_no'] == $new_no) {
+        $duplicateFields[] = 'รหัสใหม่ (New No)';
+    }
+    if ($row['user_no_pc'] == $pc) {
+        $duplicateFields[] = 'No. PC';
+    }
+    if ($row['user_monitor1'] == $m1) {
+        $duplicateFields[] = 'Monitor 1';
+    }
+    if ($row['user_monitor2'] == $m2) {
+        $duplicateFields[] = 'Monitor 2';
+    }
+    if ($row['user_ups'] == $ups) {
+        $duplicateFields[] = 'UPS';
+    }
+}
+
+$duplicateFields = array_unique($duplicateFields);
+if (!empty($duplicateFields)) {
+    $msg = 'พบข้อมูลซ้ำในโครงการของคุณ: ';
+    echo "<script>alert('" . addslashes($msg) . "'); window.history.back();</script>";
+    exit;
 }
 
 
-/* ===== CHECK EXIST ===== */
+/* ================= UPDATE ================= */
 
 $check = $conn->prepare("SELECT COUNT(*) FROM IT_user_information WHERE asset_id=?");
 $check->execute([$asset_id]);
@@ -285,9 +325,9 @@ if(!empty($asset_id)){
 
 $conn->prepare("
 UPDATE IT_assets
-SET project=?, [update]=GETDATE()
+SET project=?, use_it=?, [update]=GETDATE()
 WHERE asset_id=?
-")->execute([$site,$asset_id]);
+")->execute([$site,$emp,$asset_id]);
 
 }
 
@@ -295,9 +335,9 @@ if(!empty($m1)){
 
 $conn->prepare("
 UPDATE IT_assets
-SET project=?, [update]=GETDATE()
+SET project=?, use_it=?, [update]=GETDATE()
 WHERE no_pc=?
-")->execute([$site,$m1]);
+")->execute([$site,$emp,$m1]);
 
 }
 
@@ -305,9 +345,9 @@ if(!empty($m2)){
 
 $conn->prepare("
 UPDATE IT_assets
-SET project=?, [update]=GETDATE()
+SET project=?, use_it=?, [update]=GETDATE()
 WHERE no_pc=?
-")->execute([$site,$m2]);
+")->execute([$site,$emp,$m2]);
 
 }
 
@@ -315,9 +355,9 @@ if(!empty($ups)){
 
 $conn->prepare("
 UPDATE IT_assets
-SET project=?, [update]=GETDATE()
+SET project=?, use_it=?, [update]=GETDATE()
 WHERE no_pc=?
-")->execute([$site,$ups]);
+")->execute([$site,$emp,$ups]);
 
 }
 
@@ -456,27 +496,6 @@ data-type="<?= $c['type_equipment'] ?>"
 </div>
 </div>
 
-<!-- DUPLICATE MODAL -->
-
-<div class="modal fade" id="duplicateModal" tabindex="-1">
-<div class="modal-dialog">
-<div class="modal-content">
-
-<div class="modal-header bg-success text-white">
-<h5 class="modal-title">พบอุปกรณ์ถูกใช้งานแล้ว</h5>
-</div>
-
-<div class="modal-body">
-<p id="dupText"></p>
-</div>
-
-<div class="modal-footer">
-<button class="btn btn-success" data-bs-dismiss="modal">ปิด</button>
-</div>
-
-</div>
-</div>
-</div>
 
 <script>
 document.getElementById('empSelect').addEventListener('change',function(){
@@ -506,73 +525,6 @@ document.getElementById('ram').value = ram;
 document.getElementById('ssd').value = ssd;
 document.getElementById('gpu').value = gpu;
 document.getElementById('type_equipment').value = type;
-});
-function checkDuplicate(asset,type){
-
-fetch("check_duplicate_asset.php",{
-
-method:"POST",
-
-headers:{
-'Content-Type':'application/x-www-form-urlencoded'
-},
-
-body:"asset="+asset+"&site=<?= $site ?>"
-
-})
-.then(res=>res.json())
-.then(data=>{
-
-if(data.status=="duplicate"){
-
-document.getElementById("dupText").innerHTML =
-"อุปกรณ์นี้ถูกใช้งานแล้ว<br>"+
-"ประเภท : <b>"+type+"</b><br>"+
-"รหัส : <b>"+asset+"</b><br>"+
-"ผู้ใช้งาน : <b>"+data.user+"</b>";
-
-let modal = new bootstrap.Modal(
-document.getElementById('duplicateModal')
-);
-
-modal.show();
-
-}
-
-});
-
-}
-document.querySelector('[name="monitor1"]').addEventListener('change',function(){
-
-let asset = this.value;
-
-if(asset!="") checkDuplicate(asset,"Monitor 1");
-
-});
-
-document.querySelector('[name="monitor2"]').addEventListener('change',function(){
-
-let asset = this.value;
-
-if(asset!="") checkDuplicate(asset,"Monitor 2");
-
-});
-
-document.querySelector('[name="ups"]').addEventListener('change',function(){
-
-let asset = this.value;
-
-if(asset!="") checkDuplicate(asset,"UPS");
-
-});
-
-document.getElementById('pcSelect').addEventListener('change',function(){
-
-let opt=this.options[this.selectedIndex];
-let pc = opt.getAttribute('data-pc')||'';
-
-if(pc!="") checkDuplicate(pc,"PC");
-
 });
 </script>
 

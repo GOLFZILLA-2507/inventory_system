@@ -28,18 +28,20 @@ include 'partials/sidebar.php';
 
 <table class="table table-bordered">
 <tr>
-<th>ID</th>
+<th class="text-center">ลำดับ</th>
 <th>Asset</th>
 <th>Problem</th>
 <th>Status</th>
 <th>วันที่แจ้ง</th>
 </tr>
 
-<?php foreach($data as $r): ?>
+<?php foreach($data as $r): 
+    
+$i=1;?>
 
 <tr>
-<td><?= $r['ticket_id'] ?></td>
-<td><?= $r['no_pc'] ?></td>
+<td class="text-center"><?= $i++ ?></td>
+<td><?= $r['user_no_pc'] ?></td>
 <td><?= $r['problem'] ?></td>
 
 <td>

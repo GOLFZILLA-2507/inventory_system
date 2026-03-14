@@ -52,12 +52,10 @@ include 'partials/sidebar.php';
 <td><?= badge($d['transfer_status']) ?></td>
 <td><?= $d['transfer_date'] ?></td>
 <td>
-<<<<<<< HEAD
 
 
 <!-- <a href="transfer_action.php?action=start&id=<?= $d['transfer_id'] ?>" class="btn btn-warning btn-sm">🚚 ส่ง</a> -->
 
- 9946070 (...)
 <a href="transfer_print.php?id=<?= $d['transfer_id'] ?>" class="btn btn-dark btn-sm">🖨️</a>
 
 </td>

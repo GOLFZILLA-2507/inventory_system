@@ -36,77 +36,11 @@ $userAssets->execute([$site]);
 /* ดึงข้อมูลทั้งหมด */
 $userData = $userAssets->fetchAll(PDO::FETCH_ASSOC);
 
-
-
-/* =====================================================
-   โหลดอุปกรณ์ใช้ร่วม
-   ตาราง : IT_user_information
-   ดึงหลาย column แล้วรวมเป็น list
-===================================================== */
-
-$sqlShared = "
-SELECT
-    user_cctv,
-    user_nvr,
-    user_projector,
-    user_printer,
-    user_audio_set,
-    user_plotter,
-    user_Accessories_IT,
-    user_Drone,
-    user_Optical_Fiber,
-    user_Server
-FROM IT_user_information
-WHERE user_project = ?
-";
-
-$stmt = $conn->prepare($sqlShared);
-
-/* ส่งค่า project เข้า query */
-$stmt->execute([$site]);
-
-/* ดึงข้อมูลทั้งหมด */
-$rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-/* array สำหรับเก็บอุปกรณ์ใช้ร่วม */
-$sharedData = [];
-
-/* loop ทุก record */
-foreach($rows as $r){
-
-    /* ตรวจว่ามีค่าแล้วค่อย push เข้า array */
-
-    if(!empty($r['user_cctv']))
-        $sharedData[] = ['type'=>'CCTV','code'=>$r['user_cctv']];
-
-    if(!empty($r['user_nvr']))
-        $sharedData[] = ['type'=>'NVR','code'=>$r['user_nvr']];
-
-    if(!empty($r['user_projector']))
-        $sharedData[] = ['type'=>'Projector','code'=>$r['user_projector']];
-
-    if(!empty($r['user_printer']))
-        $sharedData[] = ['type'=>'Printer','code'=>$r['user_printer']];
-
-    if(!empty($r['user_audio_set']))
-        $sharedData[] = ['type'=>'Audio Set','code'=>$r['user_audio_set']];
-
-    if(!empty($r['user_plotter']))
-        $sharedData[] = ['type'=>'Plotter','code'=>$r['user_plotter']];
-
-    if(!empty($r['user_Accessories_IT']))
-        $sharedData[] = ['type'=>'Accessories IT','code'=>$r['user_Accessories_IT']];
-
-    if(!empty($r['user_Drone']))
-        $sharedData[] = ['type'=>'Drone','code'=>$r['user_Drone']];
-
-    if(!empty($r['user_Optical_Fiber']))
-        $sharedData[] = ['type'=>'Optical Fiber','code'=>$r['user_Optical_Fiber']];
-
-    if(!empty($r['user_Server']))
-        $sharedData[] = ['type'=>'Server','code'=>$r['user_Server']];
+/* helper: แปลงค่าที่คั่นด้วย comma เป็นบรรทัดใหม่ */
+function formatCommaLines($value) {
+    $parts = array_filter(array_map('trim', explode(',', $value ?? '')));
+    return $parts ? implode('<br>', $parts) : '-';
 }
-
 
 /* โหลด header และ sidebar */
 include 'partials/header.php';
@@ -148,7 +82,7 @@ color:white;
 <th>Spec</th>
 <th>จอที่ 1</th>
 <th>จอที่ 2</th>
-<th>UPS</th>
+<th>เครื่องสำรองไฟ</th>
 </tr>
 </thead>
 
@@ -244,6 +178,36 @@ $sharedData = [];
 
 $unique = [];
 
+
+/* =====================================================
+   โหลดอุปกรณ์ใช้ร่วม
+   ตาราง : IT_user_information
+   ดึงหลาย column แล้วรวมเป็น list
+===================================================== */
+
+$sqlShared = "
+SELECT
+    user_cctv,
+    user_nvr,
+    user_projector,
+    user_printer,
+    user_audio_set,
+    user_plotter,
+    user_Accessories_IT,
+    user_Drone,
+    user_Optical_Fiber,
+    user_Server
+FROM IT_user_information
+WHERE user_project = ?
+";
+
+$stmt = $conn->prepare($sqlShared);
+
+/* ส่งค่า project เข้า query */
+$stmt->execute([$site]);
+
+/* ดึงข้อมูลทั้งหมด */
+$rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 /* =====================================================
    loop ข้อมูลจากฐานทั้งหมด
@@ -422,7 +386,7 @@ foreach($rows as $r){
 
         $code = trim($r['user_Accessories_IT']);
 
-        $key = 'ACC-'.$code;
+        $key = 'Accessories IT-'.$code;
 
         if(!isset($unique[$key])){
 
@@ -497,113 +461,8 @@ foreach($rows as $r){
             $unique[$key] = true;
         }
     }
-
-
-
-if(!empty($r['user_cctv'])){
-
-    /* แยก CCTV ที่คั่นด้วย comma */
-    $cctvList = explode(',', $r['user_cctv']);
-
-    foreach($cctvList as $cctv){
-
-        $cctv = trim($cctv);
-
-        $key = 'CCTV-'.$cctv;
-
-        if(!isset($unique[$key])){
-
-            $sharedData[] = [
-                'type' => 'CCTV',
-                'code' => $cctv
-            ];
-
-            $unique[$key] = true;
-        }
-
-    }
-}
-    /* แยก NVR ที่คั่นด้วย comma */
-    if(!empty($r['user_nvr'])){
-        $nvrList = explode(',', $r['user_nvr']);
-        foreach($nvrList as $nvr){
-            $nvr = trim($nvr);
-            $key = 'NVR-'.$nvr;
-            if(!isset($unique[$key])){
-                $sharedData[] = ['type'=>'NVR','code'=>$nvr];
-                $unique[$key] = true;
-            }
-        }
-    }
     
-
-    if(!empty($r['user_projector'])){
-        $key = 'Projector-'.$r['user_projector'];
-        if(!isset($unique[$key])){
-            $sharedData[] = ['type'=>'Projector','code'=>$r['user_projector']];
-            $unique[$key] = true;
-        }
-    }
-
-    if(!empty($r['user_printer'])){
-        $key = 'Printer-'.$r['user_printer'];
-        if(!isset($unique[$key])){
-            $sharedData[] = ['type'=>'Printer','code'=>$r['user_printer']];
-            $unique[$key] = true;
-        }
-    }
-
-    if(!empty($r['user_audio_set'])){
-        $key = 'Audio-'.$r['user_audio_set'];
-        if(!isset($unique[$key])){
-            $sharedData[] = ['type'=>'Audio Set','code'=>$r['user_audio_set']];
-            $unique[$key] = true;
-        }
-    }
-
-    if(!empty($r['user_plotter'])){
-        $key = 'Plotter-'.$r['user_plotter'];
-        if(!isset($unique[$key])){
-            $sharedData[] = ['type'=>'Plotter','code'=>$r['user_plotter']];
-            $unique[$key] = true;
-        }
-    }
-
-    if(!empty($r['user_Accessories_IT'])){
-        $key = 'Accessories-'.$r['user_Accessories_IT'];
-        if(!isset($unique[$key])){
-            $sharedData[] = ['type'=>'Accessories IT','code'=>$r['user_Accessories_IT']];
-            $unique[$key] = true;
-        }
-    }
-
-    if(!empty($r['user_Drone'])){
-        $key = 'Drone-'.$r['user_Drone'];
-        if(!isset($unique[$key])){
-            $sharedData[] = ['type'=>'Drone','code'=>$r['user_Drone']];
-            $unique[$key] = true;
-        }
-    }
-
-    if(!empty($r['user_Optical_Fiber'])){
-        $key = 'Fiber-'.$r['user_Optical_Fiber'];
-        if(!isset($unique[$key])){
-            $sharedData[] = ['type'=>'Optical Fiber','code'=>$r['user_Optical_Fiber']];
-            $unique[$key] = true;
-        }
-    }
-
-    if(!empty($r['user_Server'])){
-        $key = 'Server-'.$r['user_Server'];
-        if(!isset($unique[$key])){
-            $sharedData[] = ['type'=>'Server','code'=>$r['user_Server']];
-            $unique[$key] = true;
-        }
-    }
-
-
-
-
+    
 /* ================= แสดงผลในตาราง ================= */
 
 foreach($sharedData as $s):

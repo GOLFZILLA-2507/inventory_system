@@ -49,8 +49,7 @@ VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
 ");
 
 $stmt->execute([
-
-$_POST['asset_id'],
+NULL, // asset_id - เก็บ null เพราะ user equipment ไม่ใช่ inventory asset
 $_SESSION['EmployeeID'],
 $_SESSION['fullname'],
 $_POST['problem'],
@@ -58,8 +57,8 @@ $_POST['priority'] ?? 'Normal',
 $img1,
 $img2,
 $img3,
-$_POST['user_new_no'] ?? '',
-$_POST['user_no_pc'] ?? '',
+$_POST['asset_id'], // ส่งค่า equipment code ไปที่ user_new_no
+$_POST['asset_id'], // ส่งค่า equipment code ไปที่ user_no_pc
 $_POST['user_equipment_details'] ?? '',
 $_POST['user_type_equipment'] ?? '',
 $userProject
@@ -70,7 +69,7 @@ exit;
 
 }
 
-/* ===== โหลดข้อมูล project ===== */
+/* ===== โหลดข้อมูลทั้งโครงการ (ทั้งหมด ไม่ซ้ำ) ===== */
 
 $stmt = $conn->prepare("
 SELECT *
@@ -80,106 +79,85 @@ WHERE user_project = ?
 
 $stmt->execute([$userProject]);
 
-$row = $stmt->fetch(PDO::FETCH_ASSOC);
+$rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 $assets = [];
 
-if($row){
-
-/* เครื่องหลัก */
-
-if(!empty($row['user_no_pc'])){
-$assets[]=[
-'asset_id'=>$row['asset_id'],
-'user_no_pc'=>$row['user_no_pc'],
-'user_new_no'=>$row['user_new_no'],
-'user_equipment_details'=>$row['user_equipment_details'],
-'user_spec'=>$row['user_spec'],
-'user_ram'=>$row['user_ram'],
-'user_gpu'=>$row['user_gpu'],
-'user_ssd'=>$row['user_ssd']
-];
+// ฟังก์ชันแยก comma-separated values
+function parseCommaSeparatedAssets($ids, $equipmentType) {
+    if(empty($ids)) return [];
+    
+    $result = [];
+    $idArray = array_filter(array_map('trim', explode(',', $ids)));
+    
+    foreach($idArray as $id) {
+        $result[] = [
+            'asset_id' => $id,
+            'user_no_pc' => $id,
+            'user_equipment_details' => $equipmentType
+        ];
+    }
+    
+    return $result;
 }
 
-/* monitor */
-
-if(!empty($row['user_monitor1'])){
-$assets[]=['asset_id'=>$row['user_monitor1'],'user_no_pc'=>$row['user_monitor1'],'user_equipment_details'=>'Monitor'];
-}
-
-if(!empty($row['user_monitor2'])){
-$assets[]=['asset_id'=>$row['user_monitor2'],'user_no_pc'=>$row['user_monitor2'],'user_equipment_details'=>'Monitor'];
-}
-
-/* CCTV */
-
-if(!empty($row['user_cctv'])){
-$assets[]=['asset_id'=>$row['user_cctv'],'user_no_pc'=>$row['user_cctv'],'user_equipment_details'=>'CCTV'];
-}
-
-/* NVR */
-
-if(!empty($row['user_nvr'])){
-$assets[]=['asset_id'=>$row['user_nvr'],'user_no_pc'=>$row['user_nvr'],'user_equipment_details'=>'NVR'];
-}
-
-/* Projector */
-
-if(!empty($row['user_projector'])){
-$assets[]=['asset_id'=>$row['user_projector'],'user_no_pc'=>$row['user_projector'],'user_equipment_details'=>'Projector'];
-}
-
-/* Printer */
-
-if(!empty($row['user_printer'])){
-$assets[]=['asset_id'=>$row['user_printer'],'user_no_pc'=>$row['user_printer'],'user_equipment_details'=>'Printer'];
-}
-
-/* Audio */
-
-if(!empty($row['user_audio_set'])){
-$assets[]=['asset_id'=>$row['user_audio_set'],'user_no_pc'=>$row['user_audio_set'],'user_equipment_details'=>'Audio'];
-}
-
-/* Plotter */
-
-if(!empty($row['user_plotter'])){
-$assets[]=['asset_id'=>$row['user_plotter'],'user_no_pc'=>$row['user_plotter'],'user_equipment_details'=>'Plotter'];
-}
-
-/* Accessories */
-
-if(!empty($row['user_Accessories_IT'])){
-$assets[]=['asset_id'=>$row['user_Accessories_IT'],'user_no_pc'=>$row['user_Accessories_IT'],'user_equipment_details'=>'Accessories'];
-}
-
-/* Drone */
-
-if(!empty($row['user_Drone'])){
-$assets[]=['asset_id'=>$row['user_Drone'],'user_no_pc'=>$row['user_Drone'],'user_equipment_details'=>'Drone'];
-}
-
-/* Fiber */
-
-if(!empty($row['user_Optical_Fiber'])){
-$assets[]=['asset_id'=>$row['user_Optical_Fiber'],'user_no_pc'=>$row['user_Optical_Fiber'],'user_equipment_details'=>'Fiber'];
-}
-
-/* Server */
-
-if(!empty($row['user_Server'])){
-$assets[]=['asset_id'=>$row['user_Server'],'user_no_pc'=>$row['user_Server'],'user_equipment_details'=>'Server'];
-}
-
+if($rows) {
+    // ฟิลด์ที่ต้องแสดง
+    $fieldsToCheck = [
+        ['col' => 'user_no_pc', 'type' => 'PC'],
+        ['col' => 'user_monitor1', 'type' => 'Monitor'],
+        ['col' => 'user_brand_1', 'type' => 'Monitor Brand'],
+        ['col' => 'user_monitor2', 'type' => 'Monitor'],
+        ['col' => 'user_brand_2', 'type' => 'Monitor Brand'],
+        ['col' => 'user_ups', 'type' => 'UPS'],
+        ['col' => 'user_cctv', 'type' => 'CCTV'],
+        ['col' => 'user_nvr', 'type' => 'NVR'],
+        ['col' => 'user_projector', 'type' => 'Projector'],
+        ['col' => 'user_printer', 'type' => 'Printer'],
+        ['col' => 'user_audio_set', 'type' => 'Audio'],
+        ['col' => 'user_plotter', 'type' => 'Plotter'],
+        ['col' => 'user_Accessories_IT', 'type' => 'Accessories'],
+        ['col' => 'user_Drone', 'type' => 'Drone'],
+        ['col' => 'user_Optical_Fiber', 'type' => 'Fiber'],
+        ['col' => 'user_Server', 'type' => 'Server'],
+    ];
+    
+    $addedIds = []; // เก็บ ID ที่เพิ่มไปแล้ว เพื่อไม่ให้ซ้ำ
+    
+    foreach($rows as $row) {
+        foreach($fieldsToCheck as $field) {
+            $colName = $field['col'];
+            $type = $field['type'];
+            
+            if(!empty($row[$colName])) {
+                // แยก comma-separated values
+                $ids = array_filter(array_map('trim', explode(',', $row[$colName])));
+                
+                foreach($ids as $id) {
+                    // ตรวจเช็ค ไม่เพิ่มซ้ำ
+                    if(!in_array($id, $addedIds)) {
+                        $assets[] = [
+                            'asset_id' => $id,
+                            'user_no_pc' => $id,
+                            'user_equipment_details' => $type,
+                            'user_spec' => $row['user_spec'] ?? '',
+                            'user_ram' => $row['user_ram'] ?? '',
+                            'user_gpu' => $row['user_gpu'] ?? '',
+                            'user_ssd' => $row['user_ssd'] ?? ''
+                        ];
+                        
+                        $addedIds[] = $id;
+                    }
+                }
+            }
+        }
+    }
 }
 
 include 'partials/header.php';
 include 'partials/sidebar.php';
 ?>
 
-<!-- ======================================================
-     STYLE
-====================================================== -->
 
 <style>
 
@@ -231,9 +209,6 @@ border:1px solid #ddd;
 
 <div class="row">
 
-<!-- ======================================
-     LEFT
-====================================== -->
 
 <div class="col-md-6">
 
@@ -248,6 +223,7 @@ border:1px solid #ddd;
 <option value="<?= $a['asset_id'] ?>"
 data-new="<?= $a['user_new_no'] ?? '' ?>"
 data-spec="<?= ($a['user_spec'] ?? '').' | '.($a['user_ram'] ?? '').' | '.($a['user_gpu'] ?? '').' | '.($a['user_ssd'] ?? '') ?>"
+data-equipment="<?= $a['user_equipment_details'] ?? '' ?>"
 >
 <?= $a['user_no_pc'] ?> | <?= $a['user_equipment_details'] ?>
 </option>
@@ -255,6 +231,11 @@ data-spec="<?= ($a['user_spec'] ?? '').' | '.($a['user_ram'] ?? '').' | '.($a['u
 <?php endforeach; ?>
 
 </select>
+
+<input type="hidden" name="user_new_no" id="user_new_no" />
+<input type="hidden" name="user_no_pc" id="user_no_pc" />
+<input type="hidden" name="user_equipment_details" id="user_equipment_details" />
+<input type="hidden" name="user_type_equipment" id="user_type_equipment" />
 
 
 <label class="label">รหัสยาว (new_no)</label>
@@ -266,25 +247,9 @@ data-spec="<?= ($a['user_spec'] ?? '').' | '.($a['user_ram'] ?? '').' | '.($a['u
 
 <textarea id="spec" class="form-control readonly mb-3" rows="3" readonly></textarea>
 
-<!--
-<label class="label">ระดับความเร่งด่วน</label>
-
-<select name="priority" class="form-control mb-3">
-
-<option value="Low">Low</option>
-<option value="Normal">Normal</option>
-<option value="High">High</option>
-<option value="Urgent">Urgent</option>
-
-</select>
--->
 
 </div>
 
-
-<!-- ======================================
-     RIGHT
-====================================== -->
 
 <div class="col-md-6">
 
@@ -328,8 +293,13 @@ document.getElementById('assetSelect').addEventListener('change',function(){
 let opt=this.options[this.selectedIndex];
 
 document.getElementById('new_no').value=opt.getAttribute('data-new')||'';
+document.getElementById('user_new_no').value=opt.getAttribute('data-new')||'';
 
 document.getElementById('spec').value=opt.getAttribute('data-spec')||'';
+
+document.getElementById('user_no_pc').value=this.value||'';
+document.getElementById('user_equipment_details').value=opt.getAttribute('data-equipment')||'';
+document.getElementById('user_type_equipment').value=opt.getAttribute('data-equipment')||'';
 
 });
 

@@ -1,21 +1,10 @@
-<<<<<<< HEAD
-<<<<<<< HEAD
+
 /* ================= กันข้อมูลซ้ำ 
 $sharedData = [];
 $unique = [];================= */
 
 ***เช็ค DEBUG***
 echo "<pre>";
-echo "USER NAME: ".$_SESSION['fullname']."\n";
-echo "USER PROJECT: ".$userProject."\n";
-print_r($assets);
-=======
-***เช็ค DEBUG***
-echo "<pre>";
-=======
-***เช็ค DEBUG***
-echo "<pre>";
->>>>>>> 9946070 (...)
 print_r($_POST);
 echo "</pre>";
 exit;
@@ -32,11 +21,7 @@ DBCC CHECKIDENT ('ชื่อฐานข้อมูล', RESEED, 0);
 UPDATE IT_assets
 SET project = N'สำนักงานใหญ่';
 ****************
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
 
->>>>>>> 9946070 (...)
 ีรีฐานรับ int 1ใหม่
 TRUNCATE TABLE IT_user_information;
 ***********************************
@@ -45,9 +30,6 @@ DELETE FROM IT_AssetTransfer_Headers;
 DBCC CHECKIDENT ('IT_AssetTransfer_Headers', RESEED, 0);
 ***************************************
 
-<<<<<<< HEAD
-=======
-=======
 DELETE FROM IT_AssetTransfer_Items;
 DELETE FROM IT_AssetTransfer_Headers;
 DBCC CHECKIDENT ('IT_AssetTransfer_Items', RESEED, 0);
