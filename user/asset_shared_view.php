@@ -5,8 +5,9 @@ require_once '../config/checklogin.php';
 /* =====================================================
    ดึงชื่อโครงการของ user ที่ login
 ===================================================== */
-
-$site = $_SESSION['site'];
+$site = $_SESSION['site']; // โครงการของ user ที่ login
+$role = $_SESSION['role_ivt'] ?? 'user'; 
+// ถ้า session ไม่มี role_ivt ให้ใช้ค่า user เป็นค่า default
 
 /* =====================================================
    โหลดข้อมูลอุปกรณ์พนักงาน
@@ -14,6 +15,7 @@ $site = $_SESSION['site'];
 
 $userAssets = $conn->prepare("
 SELECT 
+    u.asset_id,
     u.user_employee,
     u.user_no_pc,
     u.user_type_equipment,
@@ -94,6 +96,9 @@ border:1px solid #000000;
 <th>จอที่ 1</th>
 <th>จอที่ 2</th>
 <th>เครื่องสำรองไฟ</th>
+<?php if($role=='hr'): ?>
+   <th>จัดการ</th>
+<?php endif; ?>
 </tr>
 </thead>
 
@@ -104,11 +109,6 @@ border:1px solid #000000;
 if(empty($userData)){
 ?>
 
-<tr>
-<td colspan="8" class="text-center text-muted">
-ยังไม่บันทึกข้อมูล
-</td>
-</tr>
 
 <?php
 }
@@ -143,12 +143,197 @@ $spec = $u['user_spec']." | ".$u['user_ram']." | ".$u['user_ssd']." | ".$u['user
 <td><?= $u['user_monitor1'] ? $u['user_monitor1'] : '<span class="empty-data">ไม่มีข้อมูล</span>' ?></td>
 <td><?= $u['user_monitor2'] ? $u['user_monitor2'] : '<span class="empty-data">ไม่มีข้อมูล</span>' ?></td>
 <td><?= $u['user_ups'] ? $u['user_ups'] : '<span class="empty-data">ไม่มีข้อมูล</span>' ?></td>
+<?php if($role=='hr'): ?>
+
+<td class="text-center">
+
+<!-- ปุ่มเปิด modal สำหรับ HR เท่านั้น -->
+<button 
+class="btn btn-success btn-sm"
+data-bs-toggle="modal"
+data-bs-target="#editModal<?= $u['asset_id'] ?>">
+
+✏️ แก้ไข
+
+</button>
+
+</td>
+
+<?php endif; ?>
 
 </tr>
 
+<?php if($role=='hr'): ?>
+
+<!-- =====================================================
+   Modal แก้ไขข้อมูลอุปกรณ์ (เฉพาะ HR)
+===================================================== -->
+
+<div class="modal fade" id="editModal<?= $u['asset_id'] ?>" tabindex="-1">
+
+<div class="modal-dialog">
+
+<div class="modal-content">
+
+<div class="modal-header bg-success text-white">
+
+<h5 class="modal-title">แก้ไขข้อมูลอุปกรณ์</h5>
+
+<button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+
+</div>
+
+<form method="post" action="asset_update.php">
+
+<div class="modal-body">
+
+<!-- =====================================================
+     แสดงข้อมูลอุปกรณ์ก่อนแก้ไข
+===================================================== -->
+
+<div class="mb-3">
+
+<strong>👤 ชื่อผู้ใช้งาน :</strong>  
+<?= $u['user_employee'] ?>
+
+</div>
+
+
+<div class="mb-3">
+
+<strong>💻 รหัสอุปกรณ์ :</strong>  
+<?= $u['user_no_pc'] ?>
+
+</div>
+
+
+<div class="mb-3">
+
+<strong>🖥 ประเภทอุปกรณ์ :</strong>  
+<?= $u['user_type_equipment'] ?: '-' ?>
+
+</div>
+
+
+<div class="mb-3">
+
+<strong>⚙️ Spec :</strong>
+
+<?= 
+($u['user_spec'] ?: '-') . " | " .
+($u['user_ram'] ?: '-') . " | " .
+($u['user_ssd'] ?: '-') . " | " .
+($u['user_gpu'] ?: '-') 
+?>
+
+</div>
+
+
+<?php if(!empty($u['user_monitor1'])): ?>
+
+<div class="mb-2">
+
+<strong>🖥 จอที่ใช้ 1 :</strong>  
+<?= $u['user_monitor1'] ?>
+
+</div>
+
+<?php endif; ?>
+
+
+<?php if(!empty($u['user_monitor2'])): ?>
+
+<div class="mb-2">
+
+<strong>🖥 จอที่ใช้ 2 :</strong>  
+<?= $u['user_monitor2'] ?>
+
+</div>
+
+<?php endif; ?>
+
+
+<?php if(!empty($u['user_ups'])): ?>
+
+<div class="mb-3">
+
+<strong>🔌 เครื่องสำรองไฟ :</strong>  
+<?= $u['user_ups'] ?>
+
+</div>
+
+<?php endif; ?>
+
+
+<hr>
+
+
+<!-- =====================================================
+     ส่วนฟอร์มแก้ไขข้อมูล
+===================================================== -->
+
+<input type="hidden" name="asset_id" value="<?= $u['asset_id'] ?>">
+
+<div class="mb-2">
+<label>ประเภทอุปกรณ์</label>
+<input type="text" class="form-control" name="user_type_equipment" value="<?= $u['user_type_equipment'] ?>">
+</div>
+
+<div class="mb-2">
+<label>Spec</label>
+<input type="text" class="form-control" name="user_spec" value="<?= $u['user_spec'] ?>">
+</div>
+
+<div class="mb-2">
+<label>RAM</label>
+<input type="text" class="form-control" name="user_ram" value="<?= $u['user_ram'] ?>">
+</div>
+
+<div class="mb-2">
+<label>SSD</label>
+<input type="text" class="form-control" name="user_ssd" value="<?= $u['user_ssd'] ?>">
+</div>
+
+<div class="mb-2">
+<label>GPU</label>
+<input type="text" class="form-control" name="user_gpu" value="<?= $u['user_gpu'] ?>">
+</div>
+
+<div class="mb-2">
+<label>จอที่ 1</label>
+<input type="text" class="form-control" name="user_monitor1" value="<?= $u['user_monitor1'] ?>">
+</div>
+
+<div class="mb-2">
+<label>จอที่ 2</label>
+<input type="text" class="form-control" name="user_monitor2" value="<?= $u['user_monitor2'] ?>">
+</div>
+
+<div class="mb-2">
+<label>UPS</label>
+<input type="text" class="form-control" name="user_ups" value="<?= $u['user_ups'] ?>">
+</div>
+
+</div>
+
+<div class="modal-footer">
+
+<button class="btn btn-success">
+💾 บันทึก
+</button>
+
+</div>
+
+</form>
+
+</div>
+</div>
+</div>
+
+<?php endif; ?>
+
 <?php
 }
-
 }
 ?>
 

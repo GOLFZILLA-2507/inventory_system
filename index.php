@@ -8,7 +8,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     try {
         // ตรวจสอบข้อมูลผู้ใช้งานในฐานข้อมูล
-        $stmt = $conn->prepare("SELECT EmployeeID, password, fullname, role, site, position, project_id FROM Employee WHERE EmployeeID = :EmployeeID AND active = 1");
+        $stmt = $conn->prepare("SELECT EmployeeID, password, fullname, role_ivt, site, position, project_id FROM Employee WHERE EmployeeID = :EmployeeID AND active = 1");
         $stmt->bindParam(':EmployeeID', $EmployeeID);
         $stmt->execute();
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -25,13 +25,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // เก็บข้อมูลผู้ใช้งานใน session
             $_SESSION['EmployeeID'] = $user['EmployeeID'];
             $_SESSION['fullname'] = $user['fullname'];
-            $_SESSION['role'] = $user['role'];
+            $_SESSION['role_ivt'] = $user['role_ivt'];
             $_SESSION['site'] = $user['site'];
             $_SESSION['position'] = $user['position'];
             $_SESSION['project_id'] = $user['project_id'];
 
             // เปลี่ยนเส้นทางไปยังหน้า dashboard
-            if($user['role']=='admin'){ 
+            if($user['role_ivt']=='admin'){ 
                 echo "Hi Welcome Back Admin<br />";   
                 echo "<script>window.location='admin/index.php'; </script>";
             }

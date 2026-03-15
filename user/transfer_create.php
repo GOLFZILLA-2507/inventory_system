@@ -5,7 +5,9 @@ require_once '../config/checklogin.php';
 $site = $_SESSION['site'];
 $user = $_SESSION['fullname'];
 
-/* โหลดรายชื่อโครงการจากฐาน Employee */
+/* ===============================
+โหลดรายชื่อโครงการ
+=============================== */
 
 $stmt = $conn->prepare("
 SELECT DISTINCT site AS project_name
@@ -16,12 +18,12 @@ ORDER BY site
 ");
 
 $stmt->execute([$site]);
-
 $projects = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-/* =====================================================
-   โหลดข้อมูล asset ของโครงการ
-===================================================== */
+
+/* ===============================
+โหลดอุปกรณ์ของโครงการ
+=============================== */
 
 $stmt = $conn->prepare("
 SELECT *
@@ -40,15 +42,16 @@ $stmt->execute([$site]);
 $row = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 $assets = [];
-foreach($row as $row)
-{
 
-/* PC */
+foreach($row as $row){
+
+/* ================= PC ================= */
+
 if(!empty($row['user_no_pc'])){
 $assets[$row['asset_id']] = [
 'asset_id'=>$row['asset_id'],
 'no_pc'=>$row['user_no_pc'],
-'type'=>$row['user_type_equipment'],
+'type'=>$row['user_type_equipment'] ?? 'Computer',
 'details'=>$row['user_equipment_details'],
 'new_no'=>$row['user_new_no'],
 'spec'=>$row['user_spec'],
@@ -58,98 +61,160 @@ $assets[$row['asset_id']] = [
 ];
 }
 
-/* monitor */
+/* ================= Monitor ================= */
+
 if(!empty($row['user_monitor1'])){
 $assets[$row['user_monitor1']] = [
 'asset_id'=>$row['user_monitor1'],
-'no_pc'=>$row['user_monitor1']
+'no_pc'=>$row['user_monitor1'],
+'type'=>'Monitor'
 ];
 }
 
 if(!empty($row['user_monitor2'])){
 $assets[$row['user_monitor2']] = [
 'asset_id'=>$row['user_monitor2'],
-'no_pc'=>$row['user_monitor2']
+'no_pc'=>$row['user_monitor2'],
+'type'=>'Monitor'
 ];
 }
 
-/* CCTV */
+/* ================= UPS ================= */
+
+if(!empty($row['user_ups'])){
+$assets[$row['user_ups']] = [
+'asset_id'=>$row['user_ups'],
+'no_pc'=>$row['user_ups'],
+'type'=>'UPS'
+];
+}
+
+/* ================= CCTV ตัด , ================= */
+
 if(!empty($row['user_cctv'])){
-$assets[$row['user_cctv']] = [
-'asset_id'=>$row['user_cctv'],
-'no_pc'=>$row['user_cctv']
+
+$cctvList = explode(',', $row['user_cctv']);
+
+foreach($cctvList as $cctv){
+
+$cctv = trim($cctv);
+
+$assets[$cctv] = [
+'asset_id'=>$cctv,
+'no_pc'=>$cctv,
+'type'=>'CCTV'
 ];
+
 }
 
-/* NVR */
+}
+
+/* ================= NVR ตัด ,================= */
 if(!empty($row['user_nvr'])){
-$assets[$row['user_nvr']] = [
-'asset_id'=>$row['user_nvr'],
-'no_pc'=>$row['user_nvr']
+
+$nvrList = explode(',', $row['user_nvr']);
+
+foreach($nvrList as $nvr){
+
+$nvr = trim($nvr);
+
+$assets[$nvr] = [
+'asset_id'=>$nvr,
+'no_pc'=>$nvr,
+'type'=>'NVR'
 ];
+
 }
 
-/* Projector */
+}
+
+/* ================= Projector ================= */
+
 if(!empty($row['user_projector'])){
 $assets[$row['user_projector']] = [
 'asset_id'=>$row['user_projector'],
-'no_pc'=>$row['user_projector']
+'no_pc'=>$row['user_projector'],
+'type'=>'Projector'
 ];
 }
 
-/* Printer */
+/* ================= Printer ตัด================= */
+
 if(!empty($row['user_printer'])){
-$assets[$row['user_printer']] = [
-'asset_id'=>$row['user_printer'],
-'no_pc'=>$row['user_printer']
+
+$printerList = explode(',', $row['user_printer']);
+
+foreach($printerList as $printer){
+
+$printer = trim($printer);
+
+$assets[$printer] = [
+'asset_id'=>$printer,
+'no_pc'=>$printer,
+'type'=>'Printer'
 ];
+
 }
 
-/* Audio */
+}
+
+/* ================= Audio ================= */
+
 if(!empty($row['user_audio_set'])){
 $assets[$row['user_audio_set']] = [
 'asset_id'=>$row['user_audio_set'],
-'no_pc'=>$row['user_audio_set']
+'no_pc'=>$row['user_audio_set'],
+'type'=>'Audio Set'
 ];
 }
 
-/* Plotter */
+/* ================= Plotter ================= */
+
 if(!empty($row['user_plotter'])){
 $assets[$row['user_plotter']] = [
 'asset_id'=>$row['user_plotter'],
-'no_pc'=>$row['user_plotter']
+'no_pc'=>$row['user_plotter'],
+'type'=>'Plotter'
 ];
 }
 
-/* Accessories */
+/* ================= Accessories ================= */
+
 if(!empty($row['user_Accessories_IT'])){
 $assets[$row['user_Accessories_IT']] = [
 'asset_id'=>$row['user_Accessories_IT'],
-'no_pc'=>$row['user_Accessories_IT']
+'no_pc'=>$row['user_Accessories_IT'],
+'type'=>'Accessories IT'
 ];
 }
 
-/* Drone */
+/* ================= Drone ================= */
+
 if(!empty($row['user_Drone'])){
 $assets[$row['user_Drone']] = [
 'asset_id'=>$row['user_Drone'],
-'no_pc'=>$row['user_Drone']
+'no_pc'=>$row['user_Drone'],
+'type'=>'Drone'
 ];
 }
 
-/* Fiber */
+/* ================= Fiber ================= */
+
 if(!empty($row['user_Optical_Fiber'])){
 $assets[$row['user_Optical_Fiber']] = [
 'asset_id'=>$row['user_Optical_Fiber'],
-'no_pc'=>$row['user_Optical_Fiber']
+'no_pc'=>$row['user_Optical_Fiber'],
+'type'=>'Optical Fiber'
 ];
 }
 
-/* Server */
+/* ================= Server ================= */
+
 if(!empty($row['user_Server'])){
 $assets[$row['user_Server']] = [
 'asset_id'=>$row['user_Server'],
-'no_pc'=>$row['user_Server']
+'no_pc'=>$row['user_Server'],
+'type'=>'Server'
 ];
 }
 
@@ -157,7 +222,7 @@ $assets[$row['user_Server']] = [
 
 
 /* =====================================================
-   SUBMIT FORM
+SUBMIT FORM
 ===================================================== */
 
 if(isset($_POST['submit'])){
@@ -167,14 +232,34 @@ $to   = $_POST['to_site'] ?? '';
 $items = $_POST['asset_ids'] ?? [];
 
 if(empty($items)){
+
 echo "<script>alert('กรุณาเลือกอุปกรณ์');</script>";
-}
-else{
+
+}else{
+
+/* ===============================
+หาลำดับรอบการส่ง
+=============================== */
+
+$stmtRound = $conn->prepare("
+SELECT ISNULL(MAX(sent_transfer),0)+1 AS round_transfer
+FROM IT_AssetTransfer_Headers
+");
+
+$stmtRound->execute();
+$r = $stmtRound->fetch(PDO::FETCH_ASSOC);
+
+$sent_transfer = $r['round_transfer'];
+
+
+/* ===============================
+INSERT
+=============================== */
 
 $stmt = $conn->prepare("
 INSERT INTO IT_AssetTransfer_Headers
-(transfer_type,from_site,to_site,created_by,transfer_status,new_no,no_pc,details,spec,ssd,ram,gpu,type)
-VALUES (?,?,?,?, 'รอตรวจรับ',?,?,?,?,?,?,?,?)
+(sent_transfer,transfer_type,from_site,to_site,created_by,transfer_status,new_no,no_pc,details,spec,ssd,ram,gpu,type)
+VALUES (?,?,?,?,?, 'รอตรวจรับ',?,?,?,?,?,?,?,?)
 ");
 
 foreach($items as $aid){
@@ -185,6 +270,7 @@ $a = $assets[$aid];
 
 $stmt->execute([
 
+$sent_transfer,
 $type,
 $site,
 $to,
@@ -212,12 +298,9 @@ exit;
 
 }
 
-
 include 'partials/header.php';
 include 'partials/sidebar.php';
 ?>
-
-
 
 <div class="container mt-4">
 <div class="card shadow">
@@ -262,27 +345,45 @@ include 'partials/sidebar.php';
 
 <tr>
 <th>ลำดับ</th>
-<th>เลือกอุปกรณ์ที่ต้องการ</th>
-<th>รหัสเครื่อง</th>
+<th>เลือก</th>
+<th>ประเภท</th>
+<th>รหัส</th>
 <th>Spec</th>
 </tr>
 
-<?php $i=1; foreach($assets as $a): ?>
+<?php $i=1; foreach($assets as $a): 
+
+$type = !empty($a['type'])
+? $a['type']
+: '<span class="badge bg-success">ยังไม่ได้บันทึกข้อมูล</span>';
+
+$code = !empty($a['no_pc'])
+? $a['no_pc']
+: '<span class="badge bg-success">ยังไม่ได้บันทึกข้อมูล</span>';
+
+$spec = trim(($a['spec'] ?? '').($a['ram'] ?? '').($a['ssd'] ?? '').($a['gpu'] ?? ''));
+
+if($spec==''){
+$spec='<span class="badge bg-success">ยังไม่ได้บันทึกข้อมูล</span>';
+}else{
+$spec=$a['spec']." | ".$a['ram']." | ".$a['ssd']." | ".$a['gpu'];
+}
+
+?>
 
 <tr>
 
 <td><?= $i++ ?></td>
+
 <td>
 <input type="checkbox" name="asset_ids[]" value="<?= $a['asset_id'] ?>">
 </td>
 
-<td>
-<?= $a['no_pc'] ?? '' ?>
-</td>
+<td><?= $type ?></td>
 
-<td>
-<?= ($a['spec'] ?? '')." | ".($a['ram'] ?? '')." | ".($a['ssd'] ?? '')." | ".($a['gpu'] ?? '') ?>
-</td>
+<td><?= $code ?></td>
+
+<td><?= $spec ?></td>
 
 </tr>
 
@@ -290,7 +391,14 @@ include 'partials/sidebar.php';
 
 </table>
 
-<button class="btn btn-success" name="submit">
+<div class="text-end mt-2">
+<strong>
+จำนวนอุปกรณ์ที่เลือก :
+<span id="countSelect">0</span>
+</strong>
+</div>
+
+<button class="btn btn-success mt-3" name="submit">
 📨 ส่งรายการ
 </button>
 
@@ -301,3 +409,26 @@ include 'partials/sidebar.php';
 </div>
 
 <?php include 'partials/footer.php'; ?>
+
+<script>
+
+const checkboxes=document.querySelectorAll("input[name='asset_ids[]']");
+const counter=document.getElementById("countSelect");
+
+function updateCount(){
+
+let count=0;
+
+checkboxes.forEach(cb=>{
+if(cb.checked) count++;
+});
+
+counter.innerText=count;
+
+}
+
+checkboxes.forEach(cb=>{
+cb.addEventListener("change",updateCount);
+});
+
+</script>

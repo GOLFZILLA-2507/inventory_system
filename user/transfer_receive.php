@@ -6,70 +6,56 @@ $site = $_SESSION['site'];
 $user = $_SESSION['fullname'];
 $emp  = $_SESSION['EmployeeID'];
 
-
-/* =========================================
-   เมื่อกดรับอุปกรณ์
-========================================= */
+/* =====================================================
+   เมื่อกดยืนยันรับอุปกรณ์ (รับทั้งรอบ)
+===================================================== */
 
 if(isset($_POST['receive'])){
 
+$round = $_POST['round'];
 
-$tid = $_POST['transfer_id'];
+/* =====================================================
+   โหลดรายการทั้งหมดในรอบนั้น
+===================================================== */
 
-/* ดึงข้อมูล transfer */
 $stmt = $conn->prepare("
 SELECT *
 FROM IT_AssetTransfer_Headers
-WHERE transfer_id = ?
+WHERE sent_transfer = ?
 ");
-$stmt->execute([$tid]);
-$t = $stmt->fetch(PDO::FETCH_ASSOC);
 
+$stmt->execute([$round]);
+$items = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-if($t){
+foreach($items as $t){
 
 /* 1 อัพเดทสถานะรับของ */
 
 $stmt = $conn->prepare("
 UPDATE IT_AssetTransfer_Headers
 SET status='รับของแล้ว',
-receive_status='รับแล้ว',
+receive_status='รับอุปกรณ์เสร็จสิ้น',
 arrived_date = GETDATE()
 WHERE transfer_id = ?
 ");
-$stmt->execute([$tid]);
+
+$stmt->execute([$t['transfer_id']]);
 
 
-/* 2 อัพเดท site ของ user */
+/* =====================================================
+   2 บันทึกอุปกรณ์เข้าโครงการปลายทาง
+===================================================== */
 
-$stmt = $conn->prepare("
-UPDATE Employee
-SET site = ?
-WHERE EmployeeID = ?
-");
-$stmt->execute([$site,$emp]);
-
-/* =========================================
-   3 บันทึกประวัติอุปกรณ์ (สร้างแถวใหม่)
-========================================= */
-
-/* หา asset_id ล่าสุดในระบบ */
 $stmt = $conn->prepare("
 SELECT MAX(asset_id) AS max_id
 FROM IT_user_information
 ");
 
-/* execute query */
 $stmt->execute();
-
-/* ดึงค่า max asset_id */
 $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
-/* สร้าง asset_id ใหม่ */
 $new_asset_id = ($row['max_id'] ?? 0) + 1;
 
-
-/* เตรียมคำสั่ง INSERT แถวใหม่ */
 $stmt = $conn->prepare("
 INSERT INTO IT_user_information
 (
@@ -91,64 +77,28 @@ VALUES
 (?,?,?,?,?,?,?,?,?,?,?,?,GETDATE())
 ");
 
-/* execute insert */
 $stmt->execute([
 
-$new_asset_id,   // asset_id ใหม่
-$user,           // ผู้ใช้เครื่อง
-$site,           // โครงการปลายทาง
-$t['new_no'],    // รหัสยาว
-$t['no_pc'],     // รหัสเครื่อง
-$t['details'],   // รายละเอียด
-$t['spec'],      // spec
-$t['ssd'],       // ssd
-$t['ram'],       // ram
-$t['gpu'],       // gpu
-$t['type'],      // ประเภท
-$user,            // ผู้บันทึก
+$new_asset_id,
+NULL,
+$site,
+$t['new_no'],
+$t['no_pc'],
+$t['details'],
+$t['spec'],
+$t['ssd'],
+$t['ram'],
+$t['gpu'],
+$t['type'],
+$user
 
 ]);
+
 }
 
-/* =========================================
-   4 อัพเดทเครื่องต้นทาง
-   หาเครื่องจากทุก field ที่อาจเก็บรหัสอุปกรณ์
-========================================= */
-
-$stmt = $conn->prepare("
-UPDATE IT_user_information
-SET 
-status_tranfer = ?,   -- ประเภทการโอน เช่น โอนย้าย
-no_transfer = ?       -- เก็บรหัสเครื่องที่ถูกโอน
-WHERE
-(
-user_no_pc = ?
-OR user_monitor1 = ?
-OR user_monitor2 = ?
-OR user_ups = ?
-OR user_cctv = ?
-OR user_nvr = ?
-OR user_projector = ?
-OR user_printer = ?
-)
-AND user_project <> ?
-");
-
-$stmt->execute([
-$t['transfer_type'],
-$t['no_pc'],
-
-$t['no_pc'],
-$t['no_pc'],
-$t['no_pc'],
-$t['no_pc'],
-$t['no_pc'],
-$t['no_pc'],
-$t['no_pc'],
-$t['no_pc'],
-
-$site
-]);
+/* =====================================================
+   กลับหน้าเดิม
+===================================================== */
 
 header("Location: transfer_receive.php");
 exit;
@@ -156,21 +106,26 @@ exit;
 }
 
 
-/* =========================================
-   โหลดรายการรอรับ
-========================================= */
+/* =====================================================
+   โหลดรายการรอรับแบบ "รอบการส่ง"
+===================================================== */
 
 $stmt = $conn->prepare("
-SELECT *
+SELECT 
+sent_transfer,
+from_site,
+MIN(transfer_date) AS transfer_date,
+COUNT(*) AS total_items,
+MAX(status) AS status
 FROM IT_AssetTransfer_Headers
 WHERE to_site = ?
-ORDER BY transfer_id DESC
+GROUP BY sent_transfer,from_site
+ORDER BY sent_transfer DESC
 ");
 
 $stmt->execute([$site]);
 
 $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
 
 include 'partials/header.php';
 include 'partials/sidebar.php';
@@ -188,13 +143,13 @@ include 'partials/sidebar.php';
 <table class="table table-bordered table-hover">
 
 <tr>
-<th>#</th>
-<th>ประเภท</th>
-<th>รหัสเครื่อง</th>
-<th>จาก</th>
+<th width="60">#</th>
+<th>รอบการส่ง</th>
+<th>จากโครงการ</th>
+<th>จำนวนอุปกรณ์</th>
 <th>วันที่โอน</th>
-<th>สถานะโอน</th>
-<th>สถานะ</th>
+<th>วันที่ตรวจรับ</th>
+<th>รายละเอียด</th>
 <th>ตรวจรับ</th>
 </tr>
 
@@ -204,17 +159,32 @@ include 'partials/sidebar.php';
 
 <td><?= $i++ ?></td>
 
-<td><?= $d['type'] ?></td>
-
-<td><?= $d['no_pc'] ?></td>
+<td>
+<span class="badge bg-primary">
+ครั้งที่ <?= $d['sent_transfer'] ?>
+</span>
+</td>
 
 <td><?= $d['from_site'] ?></td>
 
+<td>
+<span class="badge bg-dark">
+<?= $d['total_items'] ?> รายการ
+</span>
+</td>
+
 <td><?= $d['transfer_date'] ?></td>
+<td><?= $d['arrived_date'] ?></td>
+<td>
 
-<td><?= $d['transfer_status'] ?></td>
+<a href="transfer_receive_detail.php?round=<?= $d['sent_transfer'] ?>" 
+class="btn btn-info btn-sm">
 
-<td><?= $d['status'] ?></td>
+ดูอุปกรณ์
+
+</a>
+
+</td>
 
 <td>
 
@@ -222,17 +192,21 @@ include 'partials/sidebar.php';
 
 <form method="post">
 
-<input type="hidden" name="transfer_id" value="<?= $d['transfer_id'] ?>">
+<input type="hidden" name="round" value="<?= $d['sent_transfer'] ?>">
 
 <button class="btn btn-success btn-sm" name="receive">
-ยืนยันรับอุปกรณ์
+
+ยืนยันรับ
+
 </button>
 
 </form>
 
 <?php else: ?>
 
-<span class="badge bg-success">รับแล้ว</span>
+<span class="badge bg-success">
+รับแล้ว
+</span>
 
 <?php endif; ?>
 

@@ -2,24 +2,48 @@
 require_once '../config/connect.php';
 require_once '../config/checklogin.php';
 
+/* =====================================================
+ดึงโครงการของ user ที่ login
+===================================================== */
+
 $site = $_SESSION['site'];
 
-function badge($s){
-switch($s){
-case 'pending': return '<span class="badge bg-secondary">รอส่ง</span>';
-case 'in_transit': return '<span class="badge bg-warning">กำลังส่ง</span>';
-case 'arrived': return '<span class="badge bg-info">ถึงปลายทาง</span>';
-case 'received_complete': return '<span class="badge bg-success">รับครบ</span>';
-case 'received_incomplete': return '<span class="badge bg-danger">ไม่ครบ</span>';
-default:return $s;
-}
-}
+
+/* =====================================================
+โหลดรายการโอนย้ายแบบ "รอบการส่ง"
+พร้อมตรวจเช็คสถานะปลายทาง
+===================================================== */
 
 $stmt = $conn->prepare("
-SELECT * FROM IT_AssetTransfer_Headers
-WHERE from_site=?
-ORDER BY transfer_id DESC
+SELECT 
+sent_transfer,
+from_site,
+to_site,
+transfer_type,
+
+MIN(transfer_date) AS transfer_date,
+
+COUNT(*) AS total_items,
+
+SUM(CASE WHEN receive_status='รับแล้ว' THEN 1 ELSE 0 END) AS received_items,
+
+SUM(CASE WHEN receive_status='ไม่พบอุปกรณ์นี้' THEN 1 ELSE 0 END) AS missing_items,
+
+SUM(CASE WHEN receive_status IS NULL THEN 1 ELSE 0 END) AS waiting_items
+
+FROM IT_AssetTransfer_Headers
+
+WHERE from_site = ?
+
+GROUP BY 
+sent_transfer,
+from_site,
+to_site,
+transfer_type
+
+ORDER BY sent_transfer DESC
 ");
+
 $stmt->execute([$site]);
 $data=$stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -28,42 +52,85 @@ include 'partials/sidebar.php';
 ?>
 
 <div class="container mt-4">
+
 <div class="card shadow">
-<div class="card-header bg-success text-white">📦 รายการที่ฉันส่ง</div>
+
+<div class="card-header bg-success text-white">
+📦 รายการที่ฉันส่ง
+</div>
+
 <div class="card-body">
 
-<table class="table table-bordered">
+<table class="table table-bordered table-hover">
+
 <tr>
 <th>#</th>
-<th>รหัสอุปกรณ์</th>
-<th>ประเภท</th>
+<th>รอบการส่ง</th>
 <th>จาก</th>
 <th>ปลายทาง</th>
-<th>สถานะ</th>
-<th>วันที่ทำการ</th>
-<th>วันที่รับมอบปลายทาง</th>
+<th>ประเภท</th>
+<th>จำนวน</th>
+<th>วันที่</th>
 <th>จัดการ</th>
+<th>ตรวจเช็คการจัดส่ง</th>
 </tr>
 
 <?php $i=1; foreach($data as $d): ?>
+
 <tr>
+
 <td><?= $i++ ?></td>
-<td><?= $d['no_pc'] ?></td>
-<td><?= $d['transfer_type'] ?></td>
+
+<td>
+<span class="badge bg-primary">
+ครั้งที่ <?= $d['sent_transfer'] ?>
+</span>
+</td>
+
 <td><?= $d['from_site'] ?></td>
-<td><?= $d['to_site'] ?></td>
-<td><?= badge($d['transfer_status']) ?></td>
-<td><?= badge($d['transfer_date']) ?></td>
+
+<td>
+<span class="badge bg-info">
+<?= $d['to_site'] ?>
+</span>
+</td>
+
+<td><?= $d['transfer_type'] ?></td>
+
+<td>
+<span class="badge bg-dark">
+<?= $d['total_items'] ?> รายการ
+</span>
+</td>
+
 <td><?= $d['transfer_date'] ?></td>
+
 <td>
 
+<a href="transfer_detail.php?round=<?= $d['sent_transfer'] ?>" 
+class="btn btn-info btn-sm">
 
-<!-- <a href="transfer_action.php?action=start&id=<?= $d['transfer_id'] ?>" class="btn btn-warning btn-sm">🚚 ส่ง</a> -->
+🖨️ ปริ้น
 
-<a href="transfer_print.php?id=<?= $d['transfer_id'] ?>" class="btn btn-dark btn-sm">🖨️</a>
+</a>
 
 </td>
+<td>
+
+<a 
+href="transfer_shipping_check.php?round=<?= $d['sent_transfer'] ?>">
+<?php echo '<span class="badge bg-info">📋 ดูรายละเอียด</span>';?>
+
+
+
+</a>
+
+</td>
+
+
+
 </tr>
+
 <?php endforeach; ?>
 
 </table>

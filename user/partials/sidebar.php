@@ -1,33 +1,60 @@
 <nav class="navbar navbar-expand-lg navbar-dark bg-success">
     <div class="container-fluid">
 
-        <!-- LOGO -->
+<?php
+/* =====================================================
+   ตรวจสอบ role ของ user ที่ login
+   ถ้าไม่มี role_ivt ให้กำหนดเป็น user
+===================================================== */
+$role = $_SESSION['role_ivt'] ?? 'user';
+?>
+
+        <!-- =====================================================
+             LOGO ระบบ
+        ====================================================== -->
         <a class="navbar-brand" href="asset_shared_view.php">
             🏢 Inventory System
         </a>
 
-        <!-- MOBILE BTN -->
+        <!-- =====================================================
+             ปุ่มสำหรับมือถือ
+        ====================================================== -->
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#userSidebar">
             <span class="navbar-toggler-icon"></span>
         </button>
 
-        <!-- MENU -->
+        <!-- =====================================================
+             เมนูหลักของระบบ
+        ====================================================== -->
         <div class="collapse navbar-collapse" id="userSidebar">
 
             <ul class="navbar-nav me-auto">
 
-                <!-- ================= HOME ================= -->
+                <!-- =====================================================
+                     หน้าแรก (ทุก role เห็น)
+                ====================================================== -->
                 <li class="nav-item">
                     <a class="nav-link" href="asset_shared_view.php">
                         🏠 หน้าหลัก
                     </a>
                 </li>
 
-                <!-- ================= ASSET ================= -->
+<?php
+/* =====================================================
+   ถ้าเป็น HR ให้เห็นเมนูระบบทั้งหมด
+===================================================== */
+if($role == 'hr'):
+?>
+
+                <!-- =====================================================
+                     ระบบอุปกรณ์
+                ====================================================== -->
                 <li class="nav-item dropdown">
+
                     <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
                         💻 ระบบอุปกรณ์
                     </a>
+
                     <ul class="dropdown-menu">
 
                         <li>
@@ -37,8 +64,8 @@
                         </li>
 
                         <li>
-                            <a class="dropdown-item" href="asset_shared_view.php">
-                                📡 อุปกรณ์ทั้งหมดในโครงการ
+                            <a class="dropdown-item" href="asset_available.php">
+                                📡 อุปกรณ์ที่ยังไม่มีผู้ใช้งาน
                             </a>
                         </li>
 
@@ -49,13 +76,19 @@
                         </li>
 
                     </ul>
+
                 </li>
 
-                <!-- ================= REPAIR ================= -->
+
+                <!-- =====================================================
+                     ระบบงานซ่อม
+                ====================================================== -->
                 <li class="nav-item dropdown">
+
                     <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
                         🛠 ระบบงานซ่อม
                     </a>
+
                     <ul class="dropdown-menu">
 
                         <li>
@@ -71,10 +104,15 @@
                         </li>
 
                     </ul>
+
                 </li>
 
-                <!-- ================= TRANSFER ================= -->
+
+                <!-- =====================================================
+                     ระบบโอนย้าย / ส่งมอบ
+                ====================================================== -->
                 <li class="nav-item dropdown">
+
                     <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
                         🚚 ระบบโอนย้าย / ส่งมอบ
                     </a>
@@ -100,17 +138,30 @@
                         </li>
 
                     </ul>
+
                 </li>
 
-                <!-- ================= REPORT ================= -->
+<?php
+/* =====================================================
+   ปิดเงื่อนไข HR
+===================================================== */
+endif;
+?>
+
+
+                <!-- =====================================================
+                     รายงาน (ทุก role เห็น)
+                ====================================================== -->
                 <li class="nav-item dropdown">
+
                     <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
                         📊 รายงาน
                     </a>
+
                     <ul class="dropdown-menu">
 
                         <li>
-                            <a class="dropdown-item" href="asset_shared_view.php">
+                            <a class="dropdown-item" href="asset_available.php">
                                 📡 รายงานอุปกรณ์โครงการ
                             </a>
                         </li>
@@ -122,11 +173,15 @@
                         </li>
 
                     </ul>
+
                 </li>
 
             </ul>
 
-            <!-- ================= USER INFO ================= -->
+
+            <!-- =====================================================
+                 แสดงข้อมูลผู้ใช้ที่ login
+            ====================================================== -->
             <span class="navbar-text text-white">
 
                 👤 <?= htmlspecialchars($_SESSION['fullname']) ?>
