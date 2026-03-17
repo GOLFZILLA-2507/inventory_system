@@ -143,13 +143,12 @@ include 'partials/sidebar.php';
 <table class="table table-bordered table-hover">
 
 <tr>
-<th width="60">#</th>
+<th width="60">ลำดับ</th>
 <th>รอบการส่ง</th>
 <th>จากโครงการ</th>
 <th>จำนวนอุปกรณ์</th>
 <th>วันที่โอน</th>
-<th>วันที่ตรวจรับ</th>
-<th>รายละเอียด</th>
+<th>ตรวจเช็คอุปกรณ์</th>
 <th>ตรวจรับ</th>
 </tr>
 
@@ -174,7 +173,6 @@ include 'partials/sidebar.php';
 </td>
 
 <td><?= $d['transfer_date'] ?></td>
-<td><?= $d['arrived_date'] ?></td>
 <td>
 
 <a href="transfer_receive_detail.php?round=<?= $d['sent_transfer'] ?>" 

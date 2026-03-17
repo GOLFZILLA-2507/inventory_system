@@ -442,9 +442,9 @@ include 'partials/sidebar.php';
 </select>
 </div>
 
-<!-- Accessories IT -->
+<!-- เราท์เตอร์อินเตอร์เน็ต IT -->
 <div>
-<label>Accessories IT</label>
+<label>เราท์เตอร์อินเตอร์เน็ต</label>
 <select name="accessories" class="form-control select2">
 <option value="">-- ไม่เลือก --</option>
 <?php foreach($accessories as $a): ?>

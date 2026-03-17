@@ -30,15 +30,19 @@ SELECT *
 FROM IT_user_information u
 WHERE u.user_project = ?
 
+/* =========================================
+ตัดเฉพาะเครื่องที่โอนออกจากโครงการนี้
+========================================= */
 AND NOT EXISTS (
     SELECT 1
     FROM IT_AssetTransfer_Headers t
     WHERE t.no_pc = u.user_no_pc
+    AND t.from_site = ?
     AND t.status = 'รับของแล้ว'
 )
 ");
 
-$stmt->execute([$site]);
+$stmt->execute([$site,$site]);
 $row = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 $assets = [];
@@ -51,7 +55,7 @@ if(!empty($row['user_no_pc'])){
 $assets[$row['asset_id']] = [
 'asset_id'=>$row['asset_id'],
 'no_pc'=>$row['user_no_pc'],
-'type'=>$row['user_type_equipment'] ?? 'Computer',
+'type'=>$row['user_type_equipment'],
 'details'=>$row['user_equipment_details'],
 'new_no'=>$row['user_new_no'],
 'spec'=>$row['user_spec'],
@@ -232,10 +236,10 @@ $to   = $_POST['to_site'] ?? '';
 $items = $_POST['asset_ids'] ?? [];
 
 if(empty($items)){
-
 echo "<script>alert('กรุณาเลือกอุปกรณ์');</script>";
+}
+else{
 
-}else{
 
 /* ===============================
 หาลำดับรอบการส่ง
@@ -252,14 +256,10 @@ $r = $stmtRound->fetch(PDO::FETCH_ASSOC);
 $sent_transfer = $r['round_transfer'];
 
 
-/* ===============================
-INSERT
-=============================== */
-
 $stmt = $conn->prepare("
 INSERT INTO IT_AssetTransfer_Headers
 (sent_transfer,transfer_type,from_site,to_site,created_by,transfer_status,new_no,no_pc,details,spec,ssd,ram,gpu,type)
-VALUES (?,?,?,?,?, 'รอตรวจรับ',?,?,?,?,?,?,?,?)
+VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 ");
 
 foreach($items as $aid){
@@ -275,6 +275,7 @@ $type,
 $site,
 $to,
 $user,
+'รอตรวจรับ',   // ✅ ย้ายมาไว้ตรงนี้
 
 $a['new_no'] ?? '',
 $a['no_pc'] ?? '',

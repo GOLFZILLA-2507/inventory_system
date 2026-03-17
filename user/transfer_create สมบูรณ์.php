@@ -171,6 +171,22 @@ echo "<script>alert('กรุณาเลือกอุปกรณ์');</scr
 }
 else{
 
+
+/* ===============================
+หาลำดับรอบการส่ง
+=============================== */
+
+$stmtRound = $conn->prepare("
+SELECT ISNULL(MAX(sent_transfer),0)+1 AS round_transfer
+FROM IT_AssetTransfer_Headers
+");
+
+$stmtRound->execute();
+$r = $stmtRound->fetch(PDO::FETCH_ASSOC);
+
+$sent_transfer = $r['round_transfer'];
+
+
 $stmt = $conn->prepare("
 INSERT INTO IT_AssetTransfer_Headers
 (transfer_type,from_site,to_site,created_by,transfer_status,new_no,no_pc,details,spec,ssd,ram,gpu,type)

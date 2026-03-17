@@ -29,10 +29,11 @@ include 'partials/sidebar.php';
 <table class="table table-bordered">
 <tr>
 <th class="text-center">ลำดับ</th>
-<th>Asset</th>
-<th>Problem</th>
-<th>Status</th>
+<th>รหัสอุปกรณ์</th>
+<th>รายละเอียด</th>
+<th>สถานะ</th>
 <th>วันที่แจ้ง</th>
+<th>วันที่ซ่อมเสร็จ</th>
 </tr>
 
 <?php foreach($data as $r): 

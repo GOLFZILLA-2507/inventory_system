@@ -14,21 +14,46 @@ $site = $_SESSION['site'];
 
 $stmt = $conn->prepare("
 SELECT
-asset_id,
-user_no_pc,
-user_type_equipment,
-user_spec,
-user_ram,
-user_ssd,
-user_gpu,
-user_monitor1,
-user_monitor2,
-user_ups,
-user_update
-FROM IT_user_information
-WHERE user_project = ?
-AND user_employee IS NULL
-ORDER BY user_update DESC
+u.asset_id,
+u.user_no_pc,
+u.user_monitor1,
+u.user_monitor2,
+u.user_ups,
+u.user_cctv,
+u.user_nvr,
+u.user_printer,
+u.user_projector,
+u.user_audio_set,
+u.user_plotter,
+u.user_Accessories_IT,
+u.user_Drone,
+u.user_Optical_Fiber,
+u.user_Server,
+u.user_type_equipment,
+u.user_update,
+
+t.from_site,
+t.transfer_type
+
+FROM IT_user_information u
+
+/* ===============================
+เอา transfer ล่าสุดของแต่ละเครื่อง
+=============================== */
+
+LEFT JOIN (
+    SELECT no_pc, MAX(transfer_id) AS max_id
+    FROM IT_AssetTransfer_Headers
+    GROUP BY no_pc
+) x ON x.no_pc = u.user_no_pc
+
+LEFT JOIN IT_AssetTransfer_Headers t
+ON t.transfer_id = x.max_id
+
+WHERE u.user_project = ?
+AND u.user_employee IS NULL
+
+ORDER BY u.user_update DESC
 ");
 
 $stmt->execute([$site]);
@@ -82,13 +107,12 @@ border:1px solid #000000;
 
 <tr>
 
-<th>#</th>
+<th>ลำดับ</th>
 <th>รหัสอุปกรณ์</th>
 <th>ประเภท</th>
-<th>Spec</th>
-<th>จอ</th>
-<th>UPS</th>
+<th>หมายเหตุ</th>
 <th>วันที่บันทึก</th>
+<th>จัดการ</th>
 
 </tr>
 
@@ -110,33 +134,39 @@ if(empty($data)){
 </td>
 
 </tr>
-
+<td>
 <?php
 }
 else{
-
 $i=1;
-
 foreach($data as $d){
-
-$spec = trim(($d['user_spec'] ?? '').($d['user_ram'] ?? '').($d['user_ssd'] ?? '').($d['user_gpu'] ?? ''));
-
-if($spec==''){
-$spec = '<span class="empty-data">ไม่มีข้อมูล</span>';
-}
-else{
-$spec = $d['user_spec']." | ".$d['user_ram']." | ".$d['user_ssd']." | ".$d['user_gpu'];
-}
-
 ?>
-
-<tr>
 
 <td class="text-center"><?= $i++ ?></td>
 
 <td class="fw-bold text-primary">
 
-<?= $d['user_no_pc'] ?>
+<?php
+
+$code = 
+$d['user_no_pc'] ??
+$d['user_monitor1'] ??
+$d['user_monitor2'] ??
+$d['user_ups'] ??
+$d['user_cctv'] ??
+$d['user_nvr'] ??
+$d['user_printer'] ??
+$d['user_projector'] ??
+$d['user_audio_set'] ??
+$d['user_plotter'] ??
+$d['user_Accessories_IT'] ??
+$d['user_Drone'] ??
+$d['user_Optical_Fiber'] ??
+$d['user_Server'];
+
+echo $code ?: '<span class="empty-data">ไม่มีข้อมูล</span>';
+
+?>
 
 </td>
 
@@ -148,41 +178,29 @@ $spec = $d['user_spec']." | ".$d['user_ram']." | ".$d['user_ssd']." | ".$d['user
 
 <td>
 
-<?= $spec ?>
-
-</td>
-
-<td>
-
 <?php
+if(!empty($d['from_site'])){
 
-if($d['user_monitor1'] || $d['user_monitor2']){
-
-echo $d['user_monitor1'];
-
-if($d['user_monitor2']){
-echo "<br>".$d['user_monitor2'];
-}
+echo "โอนจาก : <b>".htmlspecialchars($d['from_site'])."</b><br>";
+echo "ประเภท : <span class='badge bg-info'>".htmlspecialchars($d['transfer_type'])."</span>";
 
 }else{
 
-echo '<span class="empty-data">ไม่มี</span>';
+echo '<span class="empty-data">ไม่มีข้อมูล</span>';
 
 }
-
 ?>
 
 </td>
-
 <td>
-
-<?= $d['user_ups'] ?: '<span class="empty-data">ไม่มี</span>' ?>
+<?= $d['user_update'] ?>
 
 </td>
-
 <td>
 
-<?= $d['user_update'] ?>
+<a href="asset_assign_user.php?asset_id=<?= $d['asset_id'] ?>" class="btn btn-sm btn-outline-primary">
+    <i class="fas fa-eye"></i> 👤 เพิ่มผู้ใช้
+</a>
 
 </td>
 

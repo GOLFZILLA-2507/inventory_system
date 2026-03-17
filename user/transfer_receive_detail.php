@@ -28,17 +28,22 @@ foreach($items as $row){
 
 $id = $row['transfer_id'];
 
-/* ถ้ารายการนี้ตรวจรับแล้ว ไม่ต้องแก้ไข */
+/* ถ้ารายการนี้รับแล้ว ให้ข้าม */
 if($row['receive_status']=='รับแล้ว'){
 continue;
 }
 
-/* ถ้าติ๊ก checkbox */
+/* =========================================
+ถ้าติ๊กรับอุปกรณ์
+========================================= */
+
 if(in_array($id,$checked)){
+
+/* update header */
 
 $stmt = $conn->prepare("
 UPDATE IT_AssetTransfer_Headers
-SET 
+SET
 status='รับของแล้ว',
 receive_status='รับแล้ว',
 arrived_date = GETDATE()
@@ -47,9 +52,118 @@ WHERE transfer_id = ?
 
 $stmt->execute([$id]);
 
+/* =========================================
+เพิ่มอุปกรณ์เข้าโครงการปลายทาง
+========================================= */
+
+/* หา asset_id ล่าสุด */
+
+$stmt2 = $conn->prepare("SELECT MAX(asset_id) AS max_id FROM IT_user_information");
+$stmt2->execute();
+$row2 = $stmt2->fetch(PDO::FETCH_ASSOC);
+
+$new_asset_id = ($row2['max_id'] ?? 0) + 1; 
+
+/* =========================================
+แยกตามประเภทอุปกรณ์
+========================================= */
+
+$type = $row['type'];
+$code = $row['no_pc'];
+
+$dataInsert = [
+    'asset_id' => $new_asset_id,
+    'user_employee' => NULL,
+    'user_project' => $site,
+    'user_new_no' => $row['new_no'],
+    'user_no_pc' => NULL,
+    'user_equipment_details' => $row['details'],
+    'user_spec' => $row['spec'],
+    'user_ssd' => $row['ssd'],
+    'user_ram' => $row['ram'],
+    'user_gpu' => $row['gpu'],
+    'user_type_equipment' => $type,
+    'user_record' => $user
+];
+
+/* ===============================
+กำหนด field ตาม type
+=============================== */
+
+switch($type){
+
+    case 'Computer':
+        $dataInsert['user_no_pc'] = $code;
+        break;
+
+    case 'Monitor':
+        $dataInsert['user_monitor1'] = $code;
+        break;
+
+    case 'UPS':
+        $dataInsert['user_ups'] = $code;
+        break;
+
+    case 'CCTV':
+        $dataInsert['user_cctv'] = $code;
+        break;
+
+    case 'NVR':
+        $dataInsert['user_nvr'] = $code;
+        break;
+
+    case 'Printer':
+        $dataInsert['user_printer'] = $code;
+        break;
+
+    case 'Projector':
+        $dataInsert['user_projector'] = $code;
+        break;
+
+    case 'Audio Set':
+        $dataInsert['user_audio_set'] = $code;
+        break;
+
+    case 'Plotter':
+        $dataInsert['user_plotter'] = $code;
+        break;
+
+    case 'Accessories IT':
+        $dataInsert['user_Accessories_IT'] = $code;
+        break;
+
+    case 'Drone':
+        $dataInsert['user_Drone'] = $code;
+        break;
+
+    case 'Optical Fiber':
+        $dataInsert['user_Optical_Fiber'] = $code;
+        break;
+
+    case 'Server':
+        $dataInsert['user_Server'] = $code;
+        break;
 }
 
-/* ถ้าไม่ได้ติ๊ก และยังไม่เคยตรวจรับ */
+/* =========================================
+สร้าง SQL แบบ dynamic
+========================================= */
+
+$columns = array_keys($dataInsert);
+$placeholders = implode(',', array_fill(0, count($columns), '?'));
+
+$sql = "INSERT INTO IT_user_information (" . implode(',', $columns) . ",user_update)
+        VALUES ($placeholders, GETDATE())";
+
+$stmt2 = $conn->prepare($sql);
+$stmt2->execute(array_values($dataInsert));
+
+}
+
+/* =========================================
+ถ้าไม่ได้ติ๊ก
+========================================= */
+
 else{
 
 $stmt = $conn->prepare("
@@ -64,7 +178,11 @@ $stmt->execute([$id]);
 }
 
 }
-
+/* =========================================
+กันกด F5 แล้วบันทึกซ้ำ (สำคัญมาก)
+========================================= */
+header("Location: transfer_receive_detail.php?round=".$round);
+exit;
 }
 
 /* =========================================
@@ -80,6 +198,22 @@ WHERE sent_transfer = ?
 $stmt->execute([$round]);
 $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+/* =========================================
+เช็คว่าทั้งรอบรับครบหรือยัง
+========================================= */
+
+$allReceived = true;
+
+foreach($data as $chk){
+
+    if($chk['receive_status'] != 'รับแล้ว'){
+        $allReceived = false;
+        break;
+    }
+
+}
+
+
 include 'partials/header.php';
 include 'partials/sidebar.php';
 ?>
@@ -90,7 +224,7 @@ include 'partials/sidebar.php';
 
 <div class="card-header bg-success text-white">
 
-ตรวจรับอุปกรณ์ รอบที่ <?= $round ?>
+ตรวจรับอุปกรณ์
 
 </div>
 
@@ -180,18 +314,25 @@ echo empty($specParts)
 
 </td>
 
-
 </tr>
 
 <?php endforeach; ?>
 
 </table>
 
+<?php if(!$allReceived): ?>
+
 <button class="btn btn-success" name="confirm">
-
 ยืนยันการตรวจรับ
-
 </button>
+
+<?php else: ?>
+
+<div class="alert alert-success text-center">
+✅ รอบนี้ตรวจรับครบแล้ว
+</div>
+
+<?php endif; ?>
 
 </form>
 
