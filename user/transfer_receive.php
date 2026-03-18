@@ -149,6 +149,7 @@ include 'partials/sidebar.php';
 <th>จำนวนอุปกรณ์</th>
 <th>วันที่โอน</th>
 <th>ตรวจเช็คอุปกรณ์</th>
+<th>พิมพ์ใบตรวจเช็ค</th>
 </tr>
 
 <?php $i=1; foreach($data as $d): ?>
@@ -178,6 +179,18 @@ include 'partials/sidebar.php';
 class="btn btn-info btn-sm">
 
 ดูอุปกรณ์
+
+</a>
+
+
+
+</td>
+<td>
+
+<a href="transfer_receive_print.php?round=<?= $d['sent_transfer'] ?>" 
+class="btn btn-secondary btn-sm" target="_blank">
+
+🖨 ปริ้นใบตรวจเช็ค
 
 </a>
 

@@ -92,6 +92,7 @@ $dataInsert = [
 
 switch($type){
 
+    case 'PC':
     case 'Computer':
         $dataInsert['user_no_pc'] = $code;
         break;

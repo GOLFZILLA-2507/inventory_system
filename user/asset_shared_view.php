@@ -15,11 +15,37 @@ Dashboard Counter
 // 1. อุปกรณ์ไม่มีผู้ใช้
 $stmt1 = $conn->prepare("
 SELECT COUNT(*) 
-FROM IT_user_information
-WHERE user_project = ?
-AND user_employee IS NULL
+FROM IT_user_information u
+
+WHERE u.user_project = ?
+AND u.user_employee IS NULL
+
+AND EXISTS (
+    SELECT 1
+    FROM IT_AssetTransfer_Headers t
+    WHERE 
+        t.to_site = ?
+        AND t.receive_status = 'รับแล้ว'
+        AND (
+            t.no_pc = u.user_no_pc OR
+            t.no_pc = u.user_monitor1 OR
+            t.no_pc = u.user_monitor2 OR
+            t.no_pc = u.user_ups OR
+            t.no_pc = u.user_cctv OR
+            t.no_pc = u.user_nvr OR
+            t.no_pc = u.user_printer OR
+            t.no_pc = u.user_projector OR
+            t.no_pc = u.user_audio_set OR
+            t.no_pc = u.user_plotter OR
+            t.no_pc = u.user_Accessories_IT OR
+            t.no_pc = u.user_Drone OR
+            t.no_pc = u.user_Optical_Fiber OR
+            t.no_pc = u.user_Server
+        )
+)
+        
 ");
-$stmt1->execute([$site]);
+$stmt1->execute([$site, $site]);
 $count_no_user = $stmt1->fetchColumn();
 
 // 2. รายการที่ฉันส่ง
@@ -136,7 +162,7 @@ border:1px solid #000000;
 <a href="asset_available.php" style="text-decoration:none;">
 <div class="card text-white bg-danger shadow">
 <div class="card-body text-center">
-<h6>🖥 ไม่มีผู้ใช้</h6>
+<h6>🖥 อุปกรณ์ไม่มีผู้ใช้</h6>
 <h2><?= $count_no_user ?></h2>
 </div>
 </div>

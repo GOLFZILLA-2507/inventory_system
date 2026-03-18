@@ -71,10 +71,13 @@ ON t.transfer_id = x.max_id
 WHERE u.user_project = ?
 AND u.user_employee IS NULL
 
+AND t.to_site = ?
+AND t.receive_status = 'รับแล้ว'
+
 ORDER BY u.user_update DESC
 ");
 
-$stmt->execute([$site]);
+$stmt->execute([$site, $site]);
 
 $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
 

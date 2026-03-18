@@ -3,22 +3,57 @@ require_once '../config/connect.php';
 require_once '../config/checklogin.php';
 
 $site = $_SESSION['site'];
+$user = $_SESSION['fullname'];
 
+/* ================= FUNCTION ================= */
 
-/* ================= LOAD ASSETS ================= */
-
+// โหลด asset ตาม type
 function getByType($conn,$type){
-    // exclude items already marked as in use
     $stmt=$conn->prepare("
-SELECT asset_id,no_pc
-FROM IT_assets
-WHERE type_equipment=?
-  AND (use_it IS NULL OR use_it = '')
-ORDER BY no_pc
-");
+    SELECT asset_id,no_pc
+    FROM IT_assets
+    WHERE type_equipment=?
+    AND (use_it IS NULL OR use_it = '')
+    ORDER BY no_pc
+    ");
     $stmt->execute([$type]);
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
+
+/* ================= MULTI FUNCTION ================= */
+// รวมค่าใหม่ + ค่าเก่า (สำคัญมาก)
+function setMulti($conn, $ids, $site, $old){
+
+    $new = [];
+
+    foreach($ids as $id){
+
+        if(!$id) continue;
+
+        $q=$conn->prepare("SELECT no_pc FROM IT_assets WHERE asset_id=?");
+        $q->execute([$id]);
+        $row=$q->fetch(PDO::FETCH_ASSOC);
+
+        if($row){
+
+            $new[] = $row['no_pc'];
+
+            // update asset
+            $conn->prepare("
+            UPDATE IT_assets
+            SET project=?, use_it=?, [update]=GETDATE()
+            WHERE asset_id=?
+            ")->execute([$site,$site,$id]);
+
+        }
+    }
+
+    $oldArr = !empty($old) ? explode(',', $old) : [];
+
+    return implode(',', array_unique(array_merge($oldArr,$new)));
+}
+
+/* ================= LOAD ASSETS ================= */
 
 $audio      = getByType($conn,'audio_set');
 $cctv       = getByType($conn,'CCTV');
@@ -26,284 +61,175 @@ $nvr        = getByType($conn,'NVR');
 $printer    = getByType($conn,'Printer');
 $plotter    = getByType($conn,'Plotter');
 $projector  = getByType($conn,'Projector');
-$accessories  = getByType($conn,'Accessories_IT');
-$drone        = getByType($conn,'Drone');
-$fiber        = getByType($conn,'Optical_Fiber');
-$server       = getByType($conn,'Server');
+$accessories= getByType($conn,'Accessories_IT');
+$drone      = getByType($conn,'Drone');
+$fiber      = getByType($conn,'Optical_Fiber');
+$server     = getByType($conn,'Server');
 
 /* ================= SUBMIT ================= */
 
 if(isset($_POST['submit'])){
 
-    // collect submitted asset ids
-    $cctvArr = $_POST['cctv'] ?? [];
-    $nvrArr  = $_POST['nvr'] ?? [];
+    // แปลงเป็น array กัน error
+    $cctvArr        = (array)($_POST['cctv'] ?? []);
+    $nvrArr         = (array)($_POST['nvr'] ?? []);
+    $projectorArr   = (array)($_POST['projector'] ?? []);
+    $printerArr     = (array)($_POST['printer'] ?? []);
+    $audioArr       = (array)($_POST['audio_set'] ?? []);
+    $plotterArr     = (array)($_POST['plotter'] ?? []);
+    $accessoriesArr = (array)($_POST['accessories'] ?? []);
+    $droneArr       = (array)($_POST['drone'] ?? []);
+    $fiberArr       = (array)($_POST['fiber'] ?? []);
+    $serverArr      = (array)($_POST['server'] ?? []);
 
-    $audio_id     = $_POST['audio_set'] ?? null;
-    $printer_id   = $_POST['printer'] ?? null;
-    $plotter_id   = $_POST['plotter'] ?? null;
-    $projector_id = $_POST['projector'] ?? null;
-    $accessories_id = $_POST['accessories'] ?? null;
-    $drone_id       = $_POST['drone'] ?? null;
-    $fiber_id       = $_POST['fiber'] ?? null;
-    $server_id      = $_POST['server'] ?? null;
-
-    // === VALIDATION: avoid duplicate or already-used assets ===
+    /* ================= รวม ID ================= */
     $allIds = array_filter(array_merge(
-        $cctvArr,
-        $nvrArr,
-        [$audio_id, $printer_id, $plotter_id, $projector_id, $accessories_id, $drone_id, $fiber_id, $server_id]
+        $cctvArr,$nvrArr,$projectorArr,$printerArr,
+        $audioArr,$plotterArr,$accessoriesArr,
+        $droneArr,$fiberArr,$serverArr
     ));
 
-    // check for repeated selections in the form
+    /* ================= กันเลือกซ้ำ ================= */
     if(count($allIds) !== count(array_unique($allIds))){
-        header("Location: asset_shared_add.php?error=".urlencode('มีอุปกรณ์ถูกเลือกซ้ำ'));
+        header("Location: asset_shared_add.php?error=เลือกอุปกรณ์ซ้ำ");
         exit;
     }
 
-    // check each asset to ensure it's not already assigned to a user other than the current site
-    foreach($allIds as $aid){
-        // first resolve the asset id to its no_pc value
+    /* ================= โหลดข้อมูลเดิม ================= */
+
+    $stmt=$conn->prepare("
+    SELECT *
+    FROM IT_user_information
+    WHERE user_project=?
+    ");
+    $stmt->execute([$site]);
+    $current=$stmt->fetch(PDO::FETCH_ASSOC);
+
+    // ถ้ายังไม่มี record → สร้างใหม่
+    if(!$current){
+
+        $stmtMax = $conn->prepare("SELECT MAX(asset_id) as max_id FROM IT_user_information");
+        $stmtMax->execute();
+        $max = $stmtMax->fetch(PDO::FETCH_ASSOC);
+
+        $new_id = ($max['max_id'] ?? 0) + 1;
+
+        $conn->prepare("
+        INSERT INTO IT_user_information (asset_id, user_project, user_record, user_update)
+        VALUES (?, ?, ?, GETDATE())
+        ")->execute([$new_id, $site, $user]);
+
+        $stmt->execute([$site]);
+        $current=$stmt->fetch(PDO::FETCH_ASSOC);
+    }
+
+    /* ================= ค่าเดิม ================= */
+
+    $old_cctv = !empty($current['user_cctv']) ? explode(',',$current['user_cctv']) : [];
+    $old_nvr  = !empty($current['user_nvr']) ? explode(',',$current['user_nvr']) : [];
+
+    /* ================= CCTV ================= */
+
+    $new_cctv = [];
+
+    foreach($cctvArr as $id){
+
+        if(!$id) continue;
+
         $q=$conn->prepare("SELECT no_pc FROM IT_assets WHERE asset_id=?");
-        $q->execute([$aid]);
+        $q->execute([$id]);
         $row=$q->fetch(PDO::FETCH_ASSOC);
+
         if($row){
-            $no = $row['no_pc'];
-            // look for any record in the user information table that contains this no_pc
-            // exclude the current site since re-using within the same project is allowed
-            $uq = $conn->prepare(
-                "SELECT user_project FROM IT_user_information
-                 WHERE user_project <> ?
-                   AND (
-                         user_cctv LIKE ?
-                      OR user_nvr  LIKE ?
-                      OR user_projector = ?
-                      OR user_printer   = ?
-                      OR user_audio_set = ?
-                      OR user_plotter   = ?
-                      OR user_Accessories_IT = ?
-                      OR user_Drone     = ?
-                      OR user_Optical_Fiber = ?
-                      OR user_Server    = ?
-                   )");
-            $like = '%' . $no . '%';
-            $uq->execute([$site, $like, $like, $no, $no, $no, $no, $no, $no, $no, $no]);
-            if($urow = $uq->fetch(PDO::FETCH_ASSOC)){
-                header("Location: asset_shared_add.php?error=" . urlencode('อุปกรณ์ '.htmlspecialchars($no).' ถูกใช้งานโดยโครงการ '.htmlspecialchars($urow['user_project']).''));
-                exit;
-            }
+
+            $new_cctv[] = $row['no_pc'];
+
+            $conn->prepare("
+            UPDATE IT_assets
+            SET project=?, use_it=?, [update]=GETDATE()
+            WHERE asset_id=?
+            ")->execute([$site,$site,$id]);
         }
     }
 
-/* ================= โหลดค่าปัจจุบัน ================= */
+    /* ================= NVR ================= */
 
-$old=$conn->prepare("
-SELECT *
-FROM IT_user_information
-WHERE user_project=?
-");
-$old->execute([$site]);
-$current=$old->fetch(PDO::FETCH_ASSOC);
+    $new_nvr = [];
 
+    foreach($nvrArr as $id){
 
-/* ================= ค่าเดิม ================= */
+        if(!$id) continue;
 
-$old_cctv = !empty($current['user_cctv']) ? explode(',',$current['user_cctv']) : [];
-$old_nvr  = !empty($current['user_nvr'])  ? explode(',',$current['user_nvr'])  : [];
+        $q=$conn->prepare("SELECT no_pc FROM IT_assets WHERE asset_id=?");
+        $q->execute([$id]);
+        $row=$q->fetch(PDO::FETCH_ASSOC);
 
-$old_audio   = $current['user_audio_set'] ?? null;
-$old_printer = $current['user_printer'] ?? null;
-$old_plotter = $current['user_plotter'] ?? null;
-$old_projector = $current['user_projector'] ?? null;
+        if($row){
 
-$old_accessories = $current['user_Accessories_IT'] ?? null;
-$old_drone       = $current['user_Drone'] ?? null;
-$old_fiber       = $current['user_Optical_Fiber'] ?? null;
-$old_server      = $current['user_Server'] ?? null;
-$old_service     = $current['user_Service_life'] ?? null;
+            $new_nvr[] = $row['no_pc'];
 
-    // convert old assigned equipment (stored as no_pc) back to asset_id for duplicate checks
-    $oldIds = [];
-    $convertStmt = $conn->prepare("SELECT asset_id FROM IT_assets WHERE no_pc=?");
-    foreach($old_cctv as $no){
-        if($no){
-            $convertStmt->execute([$no]);
-            if($r=$convertStmt->fetch(PDO::FETCH_ASSOC)){
-                $oldIds[] = $r['asset_id'];
-            }
-        }
-    }
-    foreach($old_nvr as $no){
-        if($no){
-            $convertStmt->execute([$no]);
-            if($r=$convertStmt->fetch(PDO::FETCH_ASSOC)){
-                $oldIds[] = $r['asset_id'];
-            }
-        }
-    }
-    $singleOld = [$old_audio, $old_printer, $old_plotter, $old_projector, $old_accessories, $old_drone, $old_fiber, $old_server];
-    foreach($singleOld as $no){
-        if($no){
-            $convertStmt->execute([$no]);
-            if($r=$convertStmt->fetch(PDO::FETCH_ASSOC)){
-                $oldIds[] = $r['asset_id'];
-            }
+            $conn->prepare("
+            UPDATE IT_assets
+            SET project=?, use_it=?, [update]=GETDATE()
+            WHERE asset_id=?
+            ")->execute([$site,$site,$id]);
         }
     }
 
-    // validation against previously assigned assets for this site
-    if(!empty($allIds)){
-        foreach($allIds as $aid){
-            if(in_array($aid, $oldIds)){
-                header("Location: asset_shared_add.php?error=".urlencode('อุปกรณ์ ID:'.$aid.' มีการบันทึกไว้ก่อนหน้าแล้ว'));
-                exit;
-            }
-        }
-    }
+    /* ================= รวมค่า ================= */
 
-/* ================= NEW ARRAY ================= */
+    $cctv_str = implode(',', array_unique(array_merge($old_cctv,$new_cctv)));
+    $nvr_str  = implode(',', array_unique(array_merge($old_nvr,$new_nvr)));
 
-$new_cctv=[];
-$new_nvr=[];
+    /* ================= MULTI TYPE ================= */
 
+    $projector_pc   = setMulti($conn,$projectorArr,$site,$current['user_projector'] ?? null);
+    $printer_pc     = setMulti($conn,$printerArr,$site,$current['user_printer'] ?? null);
+    $audio_pc       = setMulti($conn,$audioArr,$site,$current['user_audio_set'] ?? null);
+    $plotter_pc     = setMulti($conn,$plotterArr,$site,$current['user_plotter'] ?? null);
+    $accessories_pc = setMulti($conn,$accessoriesArr,$site,$current['user_Accessories_IT'] ?? null);
+    $drone_pc       = setMulti($conn,$droneArr,$site,$current['user_Drone'] ?? null);
+    $fiber_pc       = setMulti($conn,$fiberArr,$site,$current['user_Optical_Fiber'] ?? null);
+    $server_pc      = setMulti($conn,$serverArr,$site,$current['user_Server'] ?? null);
 
-/* ================= CCTV ================= */
+    /* ================= UPDATE ================= */
 
-foreach($cctvArr as $id){
+    $stmt=$conn->prepare("
+    UPDATE IT_user_information SET
+    user_cctv=?,
+    user_nvr=?,
+    user_projector=?,
+    user_printer=?,
+    user_audio_set=?,
+    user_plotter=?,
+    user_Accessories_IT=?,
+    user_Drone=?,
+    user_Optical_Fiber=?,
+    user_Server=?,
+    user_record=?,
+    user_update=GETDATE()
+    WHERE user_project=?
+    ");
 
-    if(!$id) continue;
+    $stmt->execute([
+        $cctv_str,
+        $nvr_str,
+        $projector_pc,
+        $printer_pc,
+        $audio_pc,
+        $plotter_pc,
+        $accessories_pc,
+        $drone_pc,
+        $fiber_pc,
+        $server_pc,
+        $user,
+        $site
+    ]);
 
-    $q=$conn->prepare("SELECT no_pc FROM IT_assets WHERE asset_id=?");
-    $q->execute([$id]);
-    $row=$q->fetch(PDO::FETCH_ASSOC);
-
-    if($row){
-
-        $new_cctv[]=$row['no_pc'];
-
-        $conn->prepare("
-UPDATE IT_assets
-SET project=?, use_it=?, [update]=GETDATE()
-WHERE asset_id=?
-")->execute([$site,$site,$id]);
-
-    }
-
+    header("Location: asset_shared_view.php?success=1");
+    exit;
 }
 
-
-/* ================= NVR ================= */
-
-foreach($nvrArr as $id){
-
-    if(!$id) continue;
-
-    $q=$conn->prepare("SELECT no_pc FROM IT_assets WHERE asset_id=?");
-    $q->execute([$id]);
-    $row=$q->fetch(PDO::FETCH_ASSOC);
-
-    if($row){
-
-        $new_nvr[]=$row['no_pc'];
-
-        $conn->prepare("
-UPDATE IT_assets
-SET project=?, use_it=?, [update]=GETDATE()
-WHERE asset_id=?
-")->execute([$site,$site,$id]);
-
-    }
-
-}
-
-
-/* ================= MERGE ================= */
-
-$final_cctv=array_unique(array_merge($old_cctv,$new_cctv));
-$final_nvr=array_unique(array_merge($old_nvr,$new_nvr));
-
-$cctv_str=implode(',',$final_cctv);
-$nvr_str=implode(',',$final_nvr);
-
-
-/* ================= SINGLE FUNCTION ================= */
-
-function setSingle($conn,$id,$site,$old){
-
-    if(!$id) return $old;
-
-    $q=$conn->prepare("SELECT no_pc FROM IT_assets WHERE asset_id=?");
-    $q->execute([$id]);
-    $row=$q->fetch(PDO::FETCH_ASSOC);
-
-    if($row){
-
-        $conn->prepare("
-UPDATE IT_assets
-SET project=?, use_it=?, [update]=GETDATE()
-WHERE asset_id=?
-")->execute([$site,$site,$id]);
-
-        return $row['no_pc'];
-    }
-
-    return $old;
-
-}
-
-
-$audio_pc=setSingle($conn,$audio_id,$site,$old_audio);
-$printer_pc=setSingle($conn,$printer_id,$site,$old_printer);
-$plotter_pc=setSingle($conn,$plotter_id,$site,$old_plotter);
-$projector_pc=setSingle($conn,$projector_id,$site,$old_projector);
-$accessories_pc=setSingle($conn,$accessories_id,$site,$old_accessories);
-$drone_pc=setSingle($conn,$drone_id,$site,$old_drone);
-$fiber_pc=setSingle($conn,$fiber_id,$site,$old_fiber);
-$server_pc=setSingle($conn,$server_id,$site,$old_server);
-
-
-/* ================= UPDATE ================= */
-
-$stmt=$conn->prepare("
-UPDATE IT_user_information SET
-
-user_cctv=?,
-user_nvr=?,
-user_projector=?,
-user_printer=?,
-user_Service_life=?,
-user_audio_set=?,
-user_plotter=?,
-user_Accessories_IT=?,
-user_Drone=?,
-user_Optical_Fiber=?,
-user_Server=?,
-user_update=GETDATE()
-
-WHERE user_project=?
-");
-
-$stmt->execute([
-
-$cctv_str,
-$nvr_str,
-$projector_pc,
-$printer_pc,
-$old_service,
-$audio_pc,
-$plotter_pc,
-$accessories_pc,
-$drone_pc,
-$fiber_pc,
-$server_pc,
-$site
-
-]);
-
-header("Location: asset_shared_view.php?success=1");
-exit;
-
-}
 
 include 'partials/header.php';
 include 'partials/sidebar.php';
