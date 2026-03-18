@@ -149,7 +149,6 @@ include 'partials/sidebar.php';
 <th>จำนวนอุปกรณ์</th>
 <th>วันที่โอน</th>
 <th>ตรวจเช็คอุปกรณ์</th>
-<th>ตรวจรับ</th>
 </tr>
 
 <?php $i=1; foreach($data as $d): ?>
@@ -184,31 +183,7 @@ class="btn btn-info btn-sm">
 
 </td>
 
-<td>
 
-<?php if($d['status']!='รับของแล้ว'): ?>
-
-<form method="post">
-
-<input type="hidden" name="round" value="<?= $d['sent_transfer'] ?>">
-
-<button class="btn btn-success btn-sm" name="receive">
-
-ยืนยันรับ
-
-</button>
-
-</form>
-
-<?php else: ?>
-
-<span class="badge bg-success">
-รับแล้ว
-</span>
-
-<?php endif; ?>
-
-</td>
 
 </tr>
 

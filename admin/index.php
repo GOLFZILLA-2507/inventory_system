@@ -4,12 +4,6 @@ require_once '../config/checklogin.php';
 
 include 'partials/header.php';
 include 'partials/sidebar.php';
-
-// ตรวจสอบสิทธิ์ admin
-if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
-    header('Location: ../index.php');
-    exit;
-}
 ?>
 
 <!-- หัวข้อหน้า -->

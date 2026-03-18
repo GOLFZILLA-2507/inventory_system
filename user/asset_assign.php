@@ -4,6 +4,17 @@ require_once '../config/checklogin.php';
 
 $site = $_SESSION['site'];
 $user = $_SESSION['fullname'];
+$edit_id = $_GET['asset_id'] ?? null;
+
+$oldData = null;
+
+if($edit_id){
+    $stmt = $conn->prepare("
+        SELECT * FROM IT_user_information WHERE asset_id = ?
+    ");
+    $stmt->execute([$edit_id]);
+    $oldData = $stmt->fetch(PDO::FETCH_ASSOC);
+}
 
 /* ================= โหลดพนักงาน ================= */
 $employees = $conn->prepare("
@@ -44,6 +55,9 @@ if(isset($_POST['submit'])){
 $emp  = $_POST['employee'] ?? null;
 $pos  = $_POST['position'] ?? null;
 $asset_id = $_POST['asset_id'] ?? null;
+if(empty($asset_id) && $edit_id){
+    $asset_id = $edit_id;
+}
 
 $pc   = $_POST['no_pc'] ?? null;
 $spec = $_POST['spec'] ?? null;
@@ -83,18 +97,18 @@ $exists = $check->fetchColumn();
 
 // Prevent duplicate assignments within the same project (site).
 // This checks against existing records for the same project and reports which fields are duplicated.
+
 $dupSql = "
 SELECT asset_id,user_employee,user_new_no,user_no_pc,user_monitor1,user_monitor2,user_ups
 FROM IT_user_information
 WHERE user_project = ?
 AND (
     asset_id = ?
-    OR user_employee = ?
     OR user_new_no = ?
     OR user_no_pc = ?
-    OR user_monitor1 = NULL
-    OR user_monitor2 = NULL
-    OR user_ups = NULL
+    OR (? IS NOT NULL AND user_monitor1 = ?)
+    OR (? IS NOT NULL AND user_monitor2 = ?)
+    OR (? IS NOT NULL AND user_ups = ?)
 )";
 
 // When updating an existing assignment, ignore the current record so it doesn't self-match.
@@ -103,7 +117,16 @@ if ($exists) {
 }
 
 $dup = $conn->prepare($dupSql);
-$params = [$site, $asset_id, $emp, $new_no, $pc, $m1, $m2, $ups];
+$params = [
+    $site,
+    $asset_id,
+    $new_no,
+    $pc,
+
+    $m1, $m1,
+    $m2, $m2,
+    $ups, $ups
+];
 if ($exists) {
     $params[] = $asset_id;
 }
@@ -115,22 +138,21 @@ while ($row = $dup->fetch(PDO::FETCH_ASSOC)) {
     if ($row['asset_id'] == $asset_id) {
         $duplicateFields[] = 'Asset ID';
     }
-    if ($row['user_employee'] == $emp) {
-        $duplicateFields[] = 'พนักงาน (Employee)';
-    }
     if ($row['user_new_no'] == $new_no) {
         $duplicateFields[] = 'รหัสใหม่ (New No)';
     }
     if ($row['user_no_pc'] == $pc) {
         $duplicateFields[] = 'No. PC';
     }
-    if ($row['user_monitor1'] == $m1) {
+    if (!empty($m1) && $row['user_monitor1'] == $m1) {
         $duplicateFields[] = 'Monitor 1';
     }
-    if ($row['user_monitor2'] == $m2) {
+
+    if (!empty($m2) && $row['user_monitor2'] == $m2) {
         $duplicateFields[] = 'Monitor 2';
     }
-    if ($row['user_ups'] == $ups) {
+
+    if (!empty($ups) && $row['user_ups'] == $ups) {
         $duplicateFields[] = 'UPS';
     }
 }
@@ -143,164 +165,99 @@ if (!empty($duplicateFields)) {
 }
 
 
-/* ================= UPDATE ================= */
-
-$check = $conn->prepare("SELECT COUNT(*) FROM IT_user_information WHERE asset_id=?");
-$check->execute([$asset_id]);
-$exists = $check->fetchColumn();
-
-
-/* ================= UPDATE ================= */
-
 if($exists){
 
-$stmt = $conn->prepare("
+    // ================= UPDATE =================
 
-UPDATE IT_user_information SET
+    $stmt = $conn->prepare("
+    UPDATE IT_user_information SET
+        user_employee=?,
+        user_position=?,
+        user_project=?,
+        user_new_no=?,
+        user_no_pc=?,
+        user_equipment_details=?,
+        user_spec=?,
+        user_ssd=?,
+        user_ram=?,
+        user_gpu=?,
+        user_monitor1=?,
+        user_brand_1=NULL,
+        user_monitor2=?,
+        user_brand_2=NULL,
+        user_ups=?,
+        user_record=?,
+        user_type_equipment=?
+    WHERE asset_id=?
+    ");
 
-user_employee=?,
-user_position=?,
-user_project=?,
+    $stmt->execute([
+        $emp,
+        $pos,
+        $site,
+        $new_no,
+        $pc,
+        $equipment_details,
+        $spec,
+        $ssd,
+        $ram,
+        $gpu,
+        $m1,
+        $m2,
+        $ups,
+        $user,
+        $type_equipment,
+        $asset_id
+    ]);
 
-user_new_no=?,
-user_no_pc=?,
-user_equipment_details=?,
+}else{
 
-user_spec=?,
-user_ssd=?,
-user_ram=?,
-user_gpu=?,
+    // ================= INSERT =================
 
-user_monitor1=?,
-user_brand_1=NULL,
-user_monitor2=?,
-user_brand_2=NULL,
+    if(empty($asset_id)){
+        echo "<script>alert('กรุณาเลือกเครื่องก่อน');history.back();</script>";
+        exit;
+    }
 
-user_ups=?,
+    $stmt = $conn->prepare("
+    INSERT INTO IT_user_information(
+        asset_id,user_employee,user_position,user_project,
+        user_new_no,user_no_pc,user_equipment_details,
+        user_spec,user_ssd,user_ram,user_gpu,
+        user_monitor1,user_brand_1,user_monitor2,user_brand_2,
+        user_ups,
+        user_Service_life,user_update,
+        user_type_equipment,user_record
+    )
+    VALUES(
+        ?, ?, ?, ?,
+        ?, ?, ?,
+        ?, ?, ?, ?,
+        ?, NULL, ?, NULL,
+        ?,
+        NULL, GETDATE(),
+        ?, ?
+    )
+    ");
 
-user_record=?,
-user_type_equipment=?
-
-WHERE asset_id=?
-
-");
-
-$stmt->execute([
-
-$emp,
-$pos,
-$site,
-
-$pc,
-$new_no,
-$equipment_details,
-
-$spec,
-$ssd,
-$ram,
-$gpu,
-
-$m1,
-$m2,
-$ups,
-
-$user,
-$type_equipment,
-
-$asset_id
-
-]);
-
-}
-
-/* ================= INSERT ================= */
-
-else{
-
-$stmt = $conn->prepare("
-
-INSERT INTO IT_user_information(
-
-asset_id,
-user_employee,
-user_position,
-user_project,
-
-user_new_no,
-user_no_pc,
-user_equipment_details,
-
-user_spec,
-user_ssd,
-user_ram,
-user_gpu,
-
-user_monitor1,
-user_brand_1,
-user_monitor2,
-user_brand_2,
-
-user_ups,
-user_cctv,
-user_nvr,
-user_projector,
-user_printer,
-
-user_Service_life,
-user_update,
-
-user_audio_set,
-user_plotter,
-user_Accessories_IT,
-user_Drone,
-user_Optical_Fiber,
-user_Server,
-
-user_type_equipment,
-user_record
-
-)
-
-VALUES(
-
-?, ?, ?, ?,
-?, ?, ?,
-?, ?, ?, ?,
-?, NULL, ?, NULL,
-?, NULL, NULL, NULL, NULL,
-NULL, GETDATE(),
-NULL, NULL, NULL, NULL, NULL, NULL,
-?,?
-
-)
-
-");
-
-$stmt->execute([
-
-$asset_id,
-$emp,
-$pos,
-$site,
-
-$new_no,
-$pc,
-$equipment_details,
-
-$spec,
-$ssd,
-$ram,
-$gpu,
-
-$m1,
-$m2,
-
-$ups,
-
-$type_equipment,
-$user
-
-]);
+    $stmt->execute([
+        $asset_id,
+        $emp,
+        $pos,
+        $site,
+        $new_no,
+        $pc,
+        $equipment_details,
+        $spec,
+        $ssd,
+        $ram,
+        $gpu,
+        $m1,
+        $m2,
+        $ups,
+        $type_equipment,
+        $user
+    ]);
 
 }
 
@@ -396,7 +353,7 @@ data-dep="<?= $e['department'] ?>">
 
 <div class="col-md-6">
 <label>เลือกเครื่อง</label>
-<select id="pcSelect" name="asset_id" class="form-control mb-2" required>
+<select id="pcSelect" name="asset_id" class="form-control mb-2" >
 <option value="">-- เลือกเครื่อง --</option>
 
 <?php foreach($computers as $c): ?>
@@ -446,7 +403,10 @@ data-type="<?= $c['type_equipment'] ?>"
 <select name="monitor1" class="form-control" >
 <option value="">-- เลือกจอ --</option>
 <?php foreach($monitors as $m): ?>
-<option value="<?= $m['no_pc'] ?>"><?= $m['no_pc'] ?></option>
+<option value="<?= $m['no_pc'] ?>"
+<?= ($oldData && $oldData['user_monitor1']==$m['no_pc'])?'selected':'' ?>>
+<?= $m['no_pc'] ?>
+</option>
 <?php endforeach; ?>
 </select>
 </div>
@@ -454,9 +414,12 @@ data-type="<?= $c['type_equipment'] ?>"
 <div class="col-md-4">
 <label>Monitor 2</label>
 <select name="monitor2" class="form-control">
-<option value="">-- ไม่มี --</option>
+<option value="">-- เลือกจอ --</option>
 <?php foreach($monitors as $m): ?>
-<option value="<?= $m['no_pc'] ?>"><?= $m['no_pc'] ?></option>
+<option value="<?= $m['no_pc'] ?>"
+<?= ($oldData && $oldData['user_monitor2']==$m['no_pc'])?'selected':'' ?>>
+<?= $m['no_pc'] ?>
+</option>
 <?php endforeach; ?>
 </select>
 </div>
@@ -466,7 +429,10 @@ data-type="<?= $c['type_equipment'] ?>"
 <select name="ups" class="form-control" >
 <option value="">-- เลือก UPS --</option>
 <?php foreach($upsList as $u): ?>
-<option value="<?= $u['no_pc'] ?>"><?= $u['no_pc'] ?></option>
+<option value="<?= $u['no_pc'] ?>"
+<?= ($oldData && $oldData['user_ups']==$u['no_pc'])?'selected':'' ?>>
+<?= $u['no_pc'] ?>
+</option>
 <?php endforeach; ?>
 </select>
 </div>

@@ -8,6 +8,56 @@ require_once '../config/checklogin.php';
 
 $site = $_SESSION['site'];
 
+/* ===============================
+Dashboard Counter
+=============================== */
+
+// 1. อุปกรณ์ไม่มีผู้ใช้
+$stmt1 = $conn->prepare("
+SELECT COUNT(*) 
+FROM IT_user_information
+WHERE user_project = ?
+AND user_employee IS NULL
+");
+$stmt1->execute([$site]);
+$count_no_user = $stmt1->fetchColumn();
+
+// 2. รายการที่ฉันส่ง
+$stmt2 = $conn->prepare("
+SELECT 
+    COUNT(*) AS total_items,
+    COUNT(DISTINCT sent_transfer) AS total_round
+FROM IT_AssetTransfer_Headers
+WHERE from_site = ?
+");
+$stmt2->execute([$site]);
+
+$sentData = $stmt2->fetch(PDO::FETCH_ASSOC);
+
+$count_sent = $sentData['total_items'];
+$count_round = $sentData['total_round'];
+
+// 3. ตรวจรับอุปกรณ์ (ปลายทาง)
+$stmt3 = $conn->prepare("
+SELECT COUNT(*)
+FROM IT_AssetTransfer_Headers
+WHERE to_site = ?
+AND receive_status = 'รอตรวจรับ'
+");
+$stmt3->execute([$site]);
+$count_receive = $stmt3->fetchColumn();
+
+// 4. งานซ่อม 
+$stmt4 = $conn->prepare("
+SELECT COUNT(*)
+FROM IT_RepairTickets
+WHERE project = ?
+AND status != 'เสร็จแล้ว'
+");
+$stmt4->execute([$site]);
+$count_repair = $stmt4->fetchColumn();
+
+
 /* =====================================================
    โหลดข้อมูลอุปกรณ์พนักงาน
 ===================================================== */
@@ -73,9 +123,64 @@ background:#fff3cd;
 border-radius:6px;
 border:1px solid #000000;
 }
+
+
 </style>
 
 <div class="container mt-4">
+
+<div class="row mb-4">
+
+<!-- ไม่มีผู้ใช้ -->
+<div class="col-md-3">
+<a href="asset_available.php" style="text-decoration:none;">
+<div class="card text-white bg-danger shadow">
+<div class="card-body text-center">
+<h6>🖥 ไม่มีผู้ใช้</h6>
+<h2><?= $count_no_user ?></h2>
+</div>
+</div>
+</a>
+</div>
+
+<!-- รายการที่ส่ง -->
+<div class="col-md-3">
+<a href="transfer_list.php" style="text-decoration:none;">
+<div class="card text-white bg-primary shadow">
+<div class="card-body text-center">
+<h6>📦 รายการที่ส่ง</h6>
+<h2><?= $count_sent ?> รายการ </h2>
+</div>
+</div>
+</a>
+</div>
+
+<!-- ตรวจรับ -->
+<div class="col-md-3">
+<a href="transfer_receive.php" style="text-decoration:none;">
+<div class="card text-dark bg-warning shadow">
+<div class="card-body text-center">
+<h6>📥 รอตรวจรับ</h6>
+<h2><?= $count_receive ?></h2>
+</div>
+</div>
+</a>
+</div>
+
+<!-- ซ่อม -->
+<div class="col-md-3">
+<a href="repair_status.php" style="text-decoration:none;">
+<div class="card text-white bg-success shadow">
+<div class="card-body text-center">
+<h6>🛠 งานซ่อม</h6>
+<h2><?= $count_repair ?></h2>
+</div>
+</div>
+</a>
+</div>
+
+</div>
+
 
 <div class="card shadow">
 
@@ -206,12 +311,32 @@ SELECT
     user_Drone,
     user_Optical_Fiber,
     user_Server
-FROM IT_user_information
-WHERE user_project = ?
+FROM IT_user_information u
+WHERE u.user_project = ?
+
+AND NOT EXISTS (
+    SELECT 1
+    FROM IT_AssetTransfer_Headers t
+    WHERE 
+        (
+            t.no_pc = u.user_cctv OR
+            t.no_pc = u.user_nvr OR
+            t.no_pc = u.user_projector OR
+            t.no_pc = u.user_printer OR
+            t.no_pc = u.user_audio_set OR
+            t.no_pc = u.user_plotter OR
+            t.no_pc = u.user_Accessories_IT OR
+            t.no_pc = u.user_Drone OR
+            t.no_pc = u.user_Optical_Fiber OR
+            t.no_pc = u.user_Server
+        )
+    AND t.from_site = ?
+    AND t.status = 'รับของแล้ว'
+)
 ";
 
 $stmt = $conn->prepare($sqlShared);
-$stmt->execute([$site]);
+$stmt->execute([$site,$site]);
 
 $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 

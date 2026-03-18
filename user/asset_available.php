@@ -8,6 +8,9 @@ require_once '../config/checklogin.php';
 
 $site = $_SESSION['site'];
 
+
+
+
 /* =====================================================
    โหลดอุปกรณ์ที่ยังไม่มีผู้ใช้งาน
 ===================================================== */
@@ -45,7 +48,22 @@ LEFT JOIN (
     SELECT no_pc, MAX(transfer_id) AS max_id
     FROM IT_AssetTransfer_Headers
     GROUP BY no_pc
-) x ON x.no_pc = u.user_no_pc
+) x 
+ON x.no_pc = 
+    u.user_no_pc OR
+    x.no_pc = u.user_monitor1 OR
+    x.no_pc = u.user_monitor2 OR
+    x.no_pc = u.user_ups OR
+    x.no_pc = u.user_cctv OR
+    x.no_pc = u.user_nvr OR
+    x.no_pc = u.user_printer OR
+    x.no_pc = u.user_projector OR
+    x.no_pc = u.user_audio_set OR
+    x.no_pc = u.user_plotter OR
+    x.no_pc = u.user_Accessories_IT OR
+    x.no_pc = u.user_Drone OR
+    x.no_pc = u.user_Optical_Fiber OR
+    x.no_pc = u.user_Server
 
 LEFT JOIN IT_AssetTransfer_Headers t
 ON t.transfer_id = x.max_id
