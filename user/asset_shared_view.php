@@ -118,7 +118,12 @@ AND NOT EXISTS (
     FROM IT_AssetTransfer_Headers t
     WHERE t.no_pc = u.user_no_pc
     AND t.from_site = ?
-    AND t.status = 'รับของแล้ว'
+    AND t.receive_status = 'รับแล้ว'
+    AND t.transfer_id = (
+        SELECT MAX(t2.transfer_id)
+        FROM IT_AssetTransfer_Headers t2
+        WHERE t2.no_pc = t.no_pc
+    )
 )
 
 ORDER BY u.user_employee
@@ -325,6 +330,10 @@ $spec = $u['user_spec']." | ".$u['user_ram']." | ".$u['user_ssd']." | ".$u['user
    โหลดข้อมูล shared asset
 ===================================================== */
 
+/* =====================================================
+   โหลดข้อมูล shared asset (เอามาทั้งหมดก่อน)
+===================================================== */
+
 $sqlShared = "
 SELECT
     user_cctv,
@@ -337,34 +346,37 @@ SELECT
     user_Drone,
     user_Optical_Fiber,
     user_Server
-FROM IT_user_information u
-WHERE u.user_project = ?
-
-AND NOT EXISTS (
-    SELECT 1
-    FROM IT_AssetTransfer_Headers t
-    WHERE 
-        (
-            t.no_pc = u.user_cctv OR
-            t.no_pc = u.user_nvr OR
-            t.no_pc = u.user_projector OR
-            t.no_pc = u.user_printer OR
-            t.no_pc = u.user_audio_set OR
-            t.no_pc = u.user_plotter OR
-            t.no_pc = u.user_Accessories_IT OR
-            t.no_pc = u.user_Drone OR
-            t.no_pc = u.user_Optical_Fiber OR
-            t.no_pc = u.user_Server
-        )
-    AND t.from_site = ?
-    AND t.status = 'รับของแล้ว'
-)
+FROM IT_user_information
+WHERE user_project = ?
 ";
 
 $stmt = $conn->prepare($sqlShared);
-$stmt->execute([$site,$site]);
+$stmt->execute([$site]);
 
 $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+$stmt = $conn->prepare($sqlShared);
+$stmt->execute([$site, $site]);
+
+$rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+/* =====================================================
+   โหลดรายการที่ถูกโอนออกไปแล้ว (สำคัญมาก)
+===================================================== */
+
+$transferStmt = $conn->prepare("
+SELECT no_pc
+FROM IT_AssetTransfer_Headers
+WHERE from_site = ?
+AND receive_status = 'รับแล้ว'
+");
+
+$transferStmt->execute([$site]);
+
+$transferList = $transferStmt->fetchAll(PDO::FETCH_COLUMN);
+
+// แปลงเป็น array
+$transfered = array_map('trim', $transferList);
 
 /* =====================================================
    map ประเภทอุปกรณ์
@@ -404,18 +416,22 @@ foreach($items as $code){
 
 $code = trim($code);
 
+// 🔥 ถ้าอุปกรณ์นี้ถูกโอนออกแล้ว → ไม่ต้องแสดง
+if(in_array($code, $transfered)){
+    continue;
+}
+
 $key = $type.'-'.$code;
 
 if(isset($unique[$key])) continue;
 
 $sharedData[] = [
-
-'type'=>$type,
-'code'=>$code
-
+    'type'=>$type,
+    'code'=>$code
 ];
 
 $unique[$key] = true;
+
 
 }
 

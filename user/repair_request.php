@@ -81,6 +81,24 @@ $stmt->execute([$userProject]);
 
 $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+/* ======================================================
+   โหลดรายการอุปกรณ์ที่ถูกโอนออกไปแล้ว (สำคัญมาก)
+====================================================== */
+
+$transferStmt = $conn->prepare("
+SELECT no_pc
+FROM IT_AssetTransfer_Headers
+WHERE from_site = ?
+AND receive_status = 'รับแล้ว'
+");
+
+$transferStmt->execute([$userProject]);
+
+$transferList = $transferStmt->fetchAll(PDO::FETCH_COLUMN);
+
+// แปลงเป็น array
+$transfered = array_map('trim', $transferList);
+
 $assets = [];
 
 // ฟังก์ชันแยก comma-separated values
@@ -124,35 +142,51 @@ if($rows) {
     
     $addedIds = []; // เก็บ ID ที่เพิ่มไปแล้ว เพื่อไม่ให้ซ้ำ
     
-    foreach($rows as $row) {
-        foreach($fieldsToCheck as $field) {
-            $colName = $field['col'];
-            $type = $field['type'];
-            
-            if(!empty($row[$colName])) {
-                // แยก comma-separated values
-                $ids = array_filter(array_map('trim', explode(',', $row[$colName])));
-                
-                foreach($ids as $id) {
-                    // ตรวจเช็ค ไม่เพิ่มซ้ำ
-                    if(!in_array($id, $addedIds)) {
-                        $assets[] = [
-                            'asset_id' => $id,
-                            'user_no_pc' => $id,
-                            'user_equipment_details' => $type,
-                            'user_spec' => $row['user_spec'] ?? '',
-                            'user_ram' => $row['user_ram'] ?? '',
-                            'user_gpu' => $row['user_gpu'] ?? '',
-                            'user_ssd' => $row['user_ssd'] ?? ''
-                        ];
-                        
-                        $addedIds[] = $id;
-                    }
-                }
+foreach($rows as $row) {
+
+    foreach($fieldsToCheck as $field) {
+
+        $colName = $field['col'];
+        $type = $field['type'];
+
+        // 🔥 ถ้า field ว่าง → ข้าม
+        if(empty($row[$colName])) continue;
+
+        // 🔥 แยก comma เช่น CCTV01,CCTV02
+        $ids = array_filter(array_map('trim', explode(',', $row[$colName])));
+
+        foreach($ids as $id){
+
+            $id = trim($id);
+
+            // 🔥 ถ้าอุปกรณ์ถูกโอนออกแล้ว → ไม่ต้องแสดง
+            if(in_array($id, $transfered)){
+                continue;
             }
+
+            // 🔥 กันซ้ำ
+            if(!in_array($id, $addedIds)){
+
+                $assets[] = [
+                    'asset_id' => $id,
+                    'user_no_pc' => $id,
+                    'user_equipment_details' => $type,
+                    'user_spec' => $row['user_spec'] ?? '',
+                    'user_ram' => $row['user_ram'] ?? '',
+                    'user_gpu' => $row['user_gpu'] ?? '',
+                    'user_ssd' => $row['user_ssd'] ?? ''
+                ];
+
+                $addedIds[] = $id;
+            }
+
         }
+
     }
+
 }
+}
+
 
 include 'partials/header.php';
 include 'partials/sidebar.php';

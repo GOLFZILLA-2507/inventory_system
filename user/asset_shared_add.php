@@ -5,9 +5,9 @@ require_once '../config/checklogin.php';
 $site = $_SESSION['site'];
 $user = $_SESSION['fullname'];
 
-/* ================= FUNCTION ================= */
-
-// โหลด asset ตาม type
+/* =====================================================
+   FUNCTION โหลด asset ตาม type
+===================================================== */
 function getByType($conn,$type){
     $stmt=$conn->prepare("
     SELECT asset_id,no_pc
@@ -20,8 +20,31 @@ function getByType($conn,$type){
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
-/* ================= MULTI FUNCTION ================= */
-// รวมค่าใหม่ + ค่าเก่า (สำคัญมาก)
+/* =====================================================
+   FUNCTION รวมค่า (หัวใจของระบบนี้)
+   👉 เอาค่าเก่า + ค่าใหม่ → ต่อท้าย + กันซ้ำ
+===================================================== */
+function mergeValue($old, $newArr){
+
+    // แปลงค่าเก่าเป็น array
+    $oldArr = !empty($old) ? explode(',', $old) : [];
+
+    // trim กันช่องว่าง
+    $oldArr = array_map('trim', $oldArr);
+    $newArr = array_map('trim', $newArr);
+
+    // รวม + กันซ้ำ
+    $final = array_unique(array_merge($oldArr, $newArr));
+
+    // ลบค่าว่าง
+    $final = array_filter($final);
+
+    return !empty($final) ? implode(',', $final) : null;
+}
+
+/* =====================================================
+   FUNCTION สำหรับ multi select
+===================================================== */
 function setMulti($conn, $ids, $site, $old){
 
     $new = [];
@@ -30,6 +53,7 @@ function setMulti($conn, $ids, $site, $old){
 
         if(!$id) continue;
 
+        // หา no_pc
         $q=$conn->prepare("SELECT no_pc FROM IT_assets WHERE asset_id=?");
         $q->execute([$id]);
         $row=$q->fetch(PDO::FETCH_ASSOC);
@@ -38,23 +62,22 @@ function setMulti($conn, $ids, $site, $old){
 
             $new[] = $row['no_pc'];
 
-            // update asset
+            // update asset → mark ว่าใช้งานแล้ว
             $conn->prepare("
             UPDATE IT_assets
             SET project=?, use_it=?, [update]=GETDATE()
             WHERE asset_id=?
             ")->execute([$site,$site,$id]);
-
         }
     }
 
-    $oldArr = !empty($old) ? explode(',', $old) : [];
-
-    return implode(',', array_unique(array_merge($oldArr,$new)));
+    // 🔥 รวมค่า
+    return mergeValue($old, $new);
 }
 
-/* ================= LOAD ASSETS ================= */
-
+/* =====================================================
+   LOAD ASSETS
+===================================================== */
 $audio      = getByType($conn,'audio_set');
 $cctv       = getByType($conn,'CCTV');
 $nvr        = getByType($conn,'NVR');
@@ -66,11 +89,12 @@ $drone      = getByType($conn,'Drone');
 $fiber      = getByType($conn,'Optical_Fiber');
 $server     = getByType($conn,'Server');
 
-/* ================= SUBMIT ================= */
-
+/* =====================================================
+   SUBMIT
+===================================================== */
 if(isset($_POST['submit'])){
 
-    // แปลงเป็น array กัน error
+    // รับค่าเป็น array
     $cctvArr        = (array)($_POST['cctv'] ?? []);
     $nvrArr         = (array)($_POST['nvr'] ?? []);
     $projectorArr   = (array)($_POST['projector'] ?? []);
@@ -82,30 +106,29 @@ if(isset($_POST['submit'])){
     $fiberArr       = (array)($_POST['fiber'] ?? []);
     $serverArr      = (array)($_POST['server'] ?? []);
 
-    /* ================= รวม ID ================= */
+    /* ================= กันเลือกซ้ำ ================= */
     $allIds = array_filter(array_merge(
         $cctvArr,$nvrArr,$projectorArr,$printerArr,
         $audioArr,$plotterArr,$accessoriesArr,
         $droneArr,$fiberArr,$serverArr
     ));
 
-    /* ================= กันเลือกซ้ำ ================= */
     if(count($allIds) !== count(array_unique($allIds))){
         header("Location: asset_shared_add.php?error=เลือกอุปกรณ์ซ้ำ");
         exit;
     }
 
     /* ================= โหลดข้อมูลเดิม ================= */
-
-    $stmt=$conn->prepare("
+  $stmt=$conn->prepare("
     SELECT *
     FROM IT_user_information
-    WHERE user_project=?
+    WHERE user_project=? 
+    AND user_type_equipment='SHARED'
     ");
     $stmt->execute([$site]);
     $current=$stmt->fetch(PDO::FETCH_ASSOC);
 
-    // ถ้ายังไม่มี record → สร้างใหม่
+    /* ================= ถ้ายังไม่มี → สร้างแถวเดียว ================= */
     if(!$current){
 
         $stmtMax = $conn->prepare("SELECT MAX(asset_id) as max_id FROM IT_user_information");
@@ -115,21 +138,18 @@ if(isset($_POST['submit'])){
         $new_id = ($max['max_id'] ?? 0) + 1;
 
         $conn->prepare("
-        INSERT INTO IT_user_information (asset_id, user_project, user_record, user_update)
-        VALUES (?, ?, ?, GETDATE())
+        INSERT INTO IT_user_information 
+        (asset_id, user_project, user_type_equipment, user_record, user_update)
+        VALUES (?, ?, 'SHARED', ?, GETDATE())
         ")->execute([$new_id, $site, $user]);
-
+        // reload
         $stmt->execute([$site]);
         $current=$stmt->fetch(PDO::FETCH_ASSOC);
     }
 
-    /* ================= ค่าเดิม ================= */
-
-    $old_cctv = !empty($current['user_cctv']) ? explode(',',$current['user_cctv']) : [];
-    $old_nvr  = !empty($current['user_nvr']) ? explode(',',$current['user_nvr']) : [];
-
-    /* ================= CCTV ================= */
-
+    /* =====================================================
+       CCTV
+    ===================================================== */
     $new_cctv = [];
 
     foreach($cctvArr as $id){
@@ -141,7 +161,6 @@ if(isset($_POST['submit'])){
         $row=$q->fetch(PDO::FETCH_ASSOC);
 
         if($row){
-
             $new_cctv[] = $row['no_pc'];
 
             $conn->prepare("
@@ -152,8 +171,11 @@ if(isset($_POST['submit'])){
         }
     }
 
-    /* ================= NVR ================= */
+    $cctv_str = mergeValue($current['user_cctv'], $new_cctv);
 
+    /* =====================================================
+       NVR
+    ===================================================== */
     $new_nvr = [];
 
     foreach($nvrArr as $id){
@@ -165,7 +187,6 @@ if(isset($_POST['submit'])){
         $row=$q->fetch(PDO::FETCH_ASSOC);
 
         if($row){
-
             $new_nvr[] = $row['no_pc'];
 
             $conn->prepare("
@@ -176,24 +197,23 @@ if(isset($_POST['submit'])){
         }
     }
 
-    /* ================= รวมค่า ================= */
+    $nvr_str = mergeValue($current['user_nvr'], $new_nvr);
 
-    $cctv_str = implode(',', array_unique(array_merge($old_cctv,$new_cctv)));
-    $nvr_str  = implode(',', array_unique(array_merge($old_nvr,$new_nvr)));
+    /* =====================================================
+       MULTI TYPE
+    ===================================================== */
+    $projector_pc   = setMulti($conn,$projectorArr,$site,$current['user_projector']);
+    $printer_pc     = setMulti($conn,$printerArr,$site,$current['user_printer']);
+    $audio_pc       = setMulti($conn,$audioArr,$site,$current['user_audio_set']);
+    $plotter_pc     = setMulti($conn,$plotterArr,$site,$current['user_plotter']);
+    $accessories_pc = setMulti($conn,$accessoriesArr,$site,$current['user_Accessories_IT']);
+    $drone_pc       = setMulti($conn,$droneArr,$site,$current['user_Drone']);
+    $fiber_pc       = setMulti($conn,$fiberArr,$site,$current['user_Optical_Fiber']);
+    $server_pc      = setMulti($conn,$serverArr,$site,$current['user_Server']);
 
-    /* ================= MULTI TYPE ================= */
-
-    $projector_pc   = setMulti($conn,$projectorArr,$site,$current['user_projector'] ?? null);
-    $printer_pc     = setMulti($conn,$printerArr,$site,$current['user_printer'] ?? null);
-    $audio_pc       = setMulti($conn,$audioArr,$site,$current['user_audio_set'] ?? null);
-    $plotter_pc     = setMulti($conn,$plotterArr,$site,$current['user_plotter'] ?? null);
-    $accessories_pc = setMulti($conn,$accessoriesArr,$site,$current['user_Accessories_IT'] ?? null);
-    $drone_pc       = setMulti($conn,$droneArr,$site,$current['user_Drone'] ?? null);
-    $fiber_pc       = setMulti($conn,$fiberArr,$site,$current['user_Optical_Fiber'] ?? null);
-    $server_pc      = setMulti($conn,$serverArr,$site,$current['user_Server'] ?? null);
-
-    /* ================= UPDATE ================= */
-
+    /* =====================================================
+       UPDATE (อัปเดตแถวเดียวเท่านั้น)
+    ===================================================== */
     $stmt=$conn->prepare("
     UPDATE IT_user_information SET
     user_cctv=?,
@@ -208,7 +228,7 @@ if(isset($_POST['submit'])){
     user_Server=?,
     user_record=?,
     user_update=GETDATE()
-    WHERE user_project=?
+    WHERE user_project=? AND user_type_equipment='SHARED'
     ");
 
     $stmt->execute([
@@ -229,7 +249,6 @@ if(isset($_POST['submit'])){
     header("Location: asset_shared_view.php?success=1");
     exit;
 }
-
 
 include 'partials/header.php';
 include 'partials/sidebar.php';
