@@ -95,38 +95,20 @@ include 'partials/sidebar.php';
 <!-- 🔥 ซ่อม -->
 <div class="col-md-4">
 <div class="dashboard-card card-soft">
-<h5>🛠 แจ้งซ่อม</h5>
+<h5>🛠 รายการแจ้งซ่อม</h5>
 <h2><?= $repair ?></h2>
 <a href="repair_manage.php" class="btn btn-light btn-sm">ดูรายการ</a>
 </div>
 </div>
 
-<!-- 🔥 ไม่มีผู้ใช้ 
-<div class="col-md-4">
-<div class="dashboard-card card-deep">
-<h5>👤 ไม่มีผู้ใช้</h5>
-<h2><?= $noUser ?></h2>
-<a href="asset_no_user.php" class="btn btn-light btn-sm">จัดการ</a>
-</div>
-</div>-->
-
 <!-- 🔥 ส่งแล้ว -->
 <div class="col-md-4">
 <div class="dashboard-card card-info">
-<h5>📦 รายการส่งของฉัน</h5>
+<h5>📦 รายการส่งมอบและโอนย้ายทั้งหมด</h5>
 <h2><?= $sent ?></h2>
-<a href="admin_transfer_sent.php" class="btn btn-light btn-sm">ดู</a>
+<a href="admin_transfer_sent.php" class="btn btn-light btn-sm">ดูรายการ</a>
 </div>
 </div>
-
-<!-- 🔥 รอตรวจรับ 
-<div class="col-md-4">
-<div class="dashboard-card card-indigo">
-<h5>⏳ รอตรวจรับ</h5>
-<h2><?= $waiting ?></h2>
-<a href="receive_list.php" class="btn btn-light btn-sm">ตรวจรับ</a>
-</div>
-</div>-->
 
 <!-- 🔥 ทั้งหมด -->
 <div class="col-md-4">

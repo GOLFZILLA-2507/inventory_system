@@ -216,6 +216,7 @@ if(isset($_POST['submit'])){
     ===================================================== */
     $stmt=$conn->prepare("
     UPDATE IT_user_information SET
+    user_employee=?,
     user_cctv=?,
     user_nvr=?,
     user_projector=?,
@@ -232,6 +233,7 @@ if(isset($_POST['submit'])){
     ");
 
     $stmt->execute([
+        $site, // user_employee ใช้ชื่อโครงการแทน
         $cctv_str,
         $nvr_str,
         $projector_pc,

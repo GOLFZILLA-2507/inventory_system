@@ -38,97 +38,52 @@ if(isset($_POST['save'])){
     ");
     $stmt->execute([$value,$date1,$how1,$date2,$how2,$id]);
 
-    // ✅ กัน refresh submit ซ้ำ
-    header("Location: asset_all.php?success=1");
-    exit();
-}
 
     /* ================= SAVE USER (เพิ่มใหม่) ================= */
 if(isset($_POST['save_user'])){
 
     $asset_id = $_POST['asset_id'];
-    $user_emp = trim($_POST['user_employee']);
-    $target_project = $_POST['target_project'] ?? null;
+    $user_emp = $_POST['user_employee'];
 
-    // 🔥 หา type ของ asset
-    $asset = $conn->prepare("
-        SELECT type_equipment 
-        FROM IT_assets 
-        WHERE asset_id=?
-    ");
-    $asset->execute([$asset_id]);
-    $assetData = $asset->fetch(PDO::FETCH_ASSOC);
+    // 🔥 เช็คว่ามีอยู่แล้วไหม
+    $check = $conn->prepare("SELECT COUNT(*) FROM IT_user_information WHERE asset_id=?");
+    $check->execute([$asset_id]);
+    $exists = $check->fetchColumn();
 
-    $type = strtolower(trim($assetData['type_equipment']));
-
-    // 🔥 ประเภทใช้ร่วม
-    $shared = ['cctv','printer','projector'];
-
-    /* ==============================
-       🔴 กันซ้ำในโครงการเดียวกัน
-    ============================== */
-    $dup = $conn->prepare("
-        SELECT 1
-        FROM IT_user_information
-        WHERE user_project=? 
-        AND asset_id=?
-    ");
-    $dup->execute([$target_project,$asset_id]);
-
-    if($dup->fetch()){
-        header("Location: asset_all.php?error=duplicate");
-        exit();
-    }
-
-    /* ==============================
-       🔵 แยก logic
-    ============================== */
-    if(in_array($type, $shared)){
-
-        // 🔵 อุปกรณ์ใช้ร่วม → ไม่มี user
+    if($exists > 0){
+        // 🔄 update
         $stmt = $conn->prepare("
-            INSERT INTO IT_user_information
-            (asset_id,user_project,user_type_equipment)
-            VALUES(?,?,?)
+            UPDATE IT_user_information 
+            SET user_employee=? 
+            WHERE asset_id=?
         ");
-        $stmt->execute([$asset_id,$target_project,'SHARED']);
-
+        $stmt->execute([$user_emp,$asset_id]);
     }else{
-
-        // 🔴 อุปกรณ์หลัก → ต้องมี user
-        if(empty($user_emp)){
-            header("Location: asset_all.php?error=nouser");
-            exit();
-        }
-
+        // ➕ insert
         $stmt = $conn->prepare("
-            INSERT INTO IT_user_information
-            (asset_id,user_employee,user_project)
-            VALUES(?,?,?)
+            INSERT INTO IT_user_information(asset_id,user_employee)
+            VALUES(?,?)
         ");
-        $stmt->execute([$asset_id,$user_emp,$target_project]);
+        $stmt->execute([$asset_id,$user_emp]);
     }
 
     header("Location: asset_all.php?success=1");
     exit();
 }
 
+    // ✅ กัน refresh submit ซ้ำ
+    header("Location: service_life_view.php?success=1");
+    exit();
+}
 
 /* ================= FILTER ================= */
 $typeList = $conn->query("SELECT DISTINCT type_equipment FROM IT_assets ORDER BY type_equipment")->fetchAll(PDO::FETCH_ASSOC);
-/* 🔥 เพิ่มตรงนี้ */
+/* ================= โหลดรายชื่อพนักงาน (เพิ่มใหม่) ================= */
 $userList = $conn->query("
 SELECT fullname 
 FROM Employee
 ORDER BY fullname
 ")->fetchAll(PDO::FETCH_COLUMN);
-
-$projList = $conn->query("
-SELECT DISTINCT site 
-FROM Employee
-WHERE site IS NOT NULL
-ORDER BY site
-")->fetchAll(PDO::FETCH_ASSOC);
 
 /* ================= MAIN QUERY ================= */
 $sql = "
@@ -143,9 +98,7 @@ a.yfm_1,a.How_long,
 a.yfm_2,a.How_long2,
 u.user_employee
 FROM IT_assets a
-LEFT JOIN IT_user_information u 
-ON u.asset_id = a.asset_id
-AND (u.user_type_equipment IS NULL OR u.user_type_equipment <> 'SHARED')
+LEFT JOIN IT_user_information u ON u.asset_id=a.asset_id
 WHERE 1=1
 ";
 
@@ -173,9 +126,6 @@ $sql.=" ORDER BY a.project OFFSET $offset ROWS FETCH NEXT $limit ROWS ONLY";
 $stmt=$conn->prepare($sql);
 $stmt->execute($params);
 $data=$stmt->fetchAll(PDO::FETCH_ASSOC);
-if(empty($data)){
-    echo "<div class='alert alert-warning text-center'>⚠️ ไม่พบอุปกรณ์ในโครงการนี้</div>";
-}
 
 include 'partials/header.php';
 include 'partials/sidebar.php';
@@ -294,11 +244,6 @@ body{font-family:'Sarabun';font-size:14px;background:#eef6ff;}
 </div>
 
 <div class="card-body">
-<?php if(isset($_GET['error']) && $_GET['error']=='duplicate'): ?>
-<div class="alert alert-danger text-center">
-❌ คนนี้มีอุปกรณ์ในโครงการนี้อยู่แล้ว
-</div>
-<?php endif; ?>
 
 <!-- FILTER -->
 <form class="row mb-3">
@@ -319,10 +264,10 @@ body{font-family:'Sarabun';font-size:14px;background:#eef6ff;}
 
 <div class="col-md-3">
 <select name="project" class="form-control">
-<option value="">-- โครงการทั้งหมด --</option>
+<option value="">-- ทั้งหมด --</option>
 <?php foreach($projList as $p): ?>
-<option value="<?= $p['site'] ?>">
-<?= $p['site'] ?>
+<option value="<?= $p['project'] ?>" <?= $proj==$p['project']?'selected':'' ?>>
+<?= $p['project'] ?>
 </option>
 <?php endforeach; ?>
 </select>
@@ -350,13 +295,8 @@ body{font-family:'Sarabun';font-size:14px;background:#eef6ff;}
 </thead>
 
 <tbody>
-<?php 
 
-// 🔥 เพิ่มตรงนี้ (ก่อน foreach)
-$shared = ['cctv','printer','projector'];
-
-$i= $offset + 1; 
-foreach($data as $row):
+<?php $i= $offset + 1; foreach($data as $row): 
 
 $spec = $row['spec']." | ".$row['ram']." | ".$row['ssd']." | ".$row['gpu'];
 
@@ -395,25 +335,14 @@ else{
 </td>
 <td>
 <?php 
-// 🔥 แก้ตรงนี้: กัน error + normalize ค่า
-$type = strtolower(trim($row['type_equipment'])); 
-if(in_array($type, $shared)): 
+// 🔥 ถ้าเป็นอุปกรณ์ใช้ร่วม = ไม่ให้แสดงปุ่ม
+if(empty($row['user_employee']) && $row['type_equipment'] != 'cctv,printer,projector'): 
 ?>
-
-<button class="btn btn-warning btn-sm"
-data-bs-toggle="modal"
-data-bs-target="#assignUser<?= $row['asset_id'] ?>">
-นำมาใช้งาน
-</button>
-
-<?php else: ?>
-
-<button class="btn btn-success btn-sm"
-data-bs-toggle="modal"
-data-bs-target="#assignUser<?= $row['asset_id'] ?>">
-เพิ่มผู้ใช้งาน
-</button>
-
+    <button type="button" class="btn btn-success btn-sm"
+            data-bs-toggle="modal"
+            data-bs-target="#assignUser<?= $row['asset_id'] ?>">
+        เพิ่มผู้ใช้งาน
+    </button>
 <?php endif; ?>
 
 </tr>
@@ -558,24 +487,7 @@ value="<?= $row['machine_value'] ?>">
     <option value="<?= $u ?>">
 <?php endforeach; ?>
 </datalist>
-
-<!-- 🔥 เลือกโครงการ -->
-<div class="mb-3">
-<label>โครงการปลายทาง</label>
-<select name="target_project" class="form-control" required>
-<option value="">-- เลือกโครงการ --</option>
-<?php foreach($projList as $p): ?>
-<option value="<?= $p['site'] ?>"><?= $p['site'] ?></option>
-<?php endforeach; ?>
-</select>
 </div>
-</div>
-
-<?php if(!in_array($type, $shared)): ?>
-
-
-
-<?php endif; ?>
 
 </div>
 

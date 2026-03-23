@@ -39,13 +39,58 @@ if(isset($_POST['save'])){
     $stmt->execute([$value,$date1,$how1,$date2,$how2,$id]);
 
     // ✅ กัน refresh submit ซ้ำ
-    header("Location: service_life_view.php?success=1");
+    header("Location: asset_all.php?success=1");
+    exit();
+}
+
+    /* ================= SAVE USER (เพิ่มใหม่) ================= */
+if(isset($_POST['save_user'])){
+
+    $asset_id = $_POST['asset_id'];
+    $user_emp = $_POST['user_employee'];
+
+    // 🔥 เพิ่มตรงนี้
+    $user_project = $conn->query("
+    SELECT project FROM IT_assets WHERE asset_id='$asset_id'
+    ")->fetchColumn();
+
+    // 🔥 เช็คว่ามีอยู่แล้วไหม
+    $check = $conn->prepare("SELECT COUNT(*) FROM IT_user_information WHERE asset_id=?");
+    $check->execute([$asset_id]);
+    $exists = $check->fetchColumn();
+
+    if($exists > 0){
+        // 🔄 update
+        $stmt = $conn->prepare("
+            UPDATE IT_user_information 
+            SET user_employee=? 
+            WHERE asset_id=?
+        ");
+        $stmt->execute([$user_emp,$asset_id]);
+    }else{
+        // ➕ insert
+        $stmt = $conn->prepare("
+            INSERT INTO IT_user_information(asset_id,user_employee,user_project)
+            VALUES(?,?,?)
+        ");
+        $stmt->execute([$asset_id,$user_emp,$user_project]);
+    }
+
+    header("Location: asset_all.php?success=1");
     exit();
 }
 
 /* ================= FILTER ================= */
+/* ================= FILTER ================= */
 $typeList = $conn->query("SELECT DISTINCT type_equipment FROM IT_assets ORDER BY type_equipment")->fetchAll(PDO::FETCH_ASSOC);
-$projList = $conn->query("SELECT DISTINCT project FROM IT_assets ORDER BY project")->fetchAll(PDO::FETCH_ASSOC);
+
+/* 🔥 แก้ตรงนี้ */
+$projList = $conn->query("
+SELECT DISTINCT project 
+FROM IT_assets
+WHERE project IS NOT NULL
+ORDER BY project
+")->fetchAll(PDO::FETCH_ASSOC);
 
 /* ================= MAIN QUERY ================= */
 $sql = "
@@ -88,6 +133,9 @@ $sql.=" ORDER BY a.project OFFSET $offset ROWS FETCH NEXT $limit ROWS ONLY";
 $stmt=$conn->prepare($sql);
 $stmt->execute($params);
 $data=$stmt->fetchAll(PDO::FETCH_ASSOC);
+if(empty($data)){
+    echo "<div class='alert alert-warning text-center'>⚠️ ไม่พบอุปกรณ์ในโครงการนี้</div>";
+}
 
 include 'partials/header.php';
 include 'partials/sidebar.php';
@@ -177,6 +225,25 @@ body{font-family:'Sarabun';font-size:14px;background:#eef6ff;}
     margin-top:25px;
     text-align:right;
 }
+/* 🔥 modal ฟ้าๆ สวย */
+.modal-content{
+    border-radius:12px;
+    box-shadow:0 10px 25px rgba(0,0,0,0.15);
+}
+
+.modal-header{
+    border-top-left-radius:12px;
+    border-top-right-radius:12px;
+}
+
+.btn-primary{
+    background:linear-gradient(135deg,#0d6efd,#0dcaf0);
+    border:none;
+}
+
+.btn-primary:hover{
+    opacity:0.9;
+}
 </style>
 
 <div class="container mt-4">
@@ -196,7 +263,7 @@ body{font-family:'Sarabun';font-size:14px;background:#eef6ff;}
 
 <div class="col-md-3">
 <select name="type" class="form-control">
-<option value="">-- ประเภท --</option>
+<option value="">-- ทุกประเภท --</option>
 <?php foreach($typeList as $t): ?>
 <option value="<?= $t['type_equipment'] ?>" <?= $type==$t['type_equipment']?'selected':'' ?>>
 <?= $t['type_equipment'] ?>
@@ -207,7 +274,7 @@ body{font-family:'Sarabun';font-size:14px;background:#eef6ff;}
 
 <div class="col-md-3">
 <select name="project" class="form-control">
-<option value="">-- โครงการ --</option>
+<option value="">-- โครงการทั้งหมด --</option>
 <?php foreach($projList as $p): ?>
 <option value="<?= $p['project'] ?>" <?= $proj==$p['project']?'selected':'' ?>>
 <?= $p['project'] ?>
@@ -228,14 +295,23 @@ body{font-family:'Sarabun';font-size:14px;background:#eef6ff;}
 <th>ผู้ใช้</th>
 <th>โครงการ</th>
 <th>รหัส</th>
-<th>วัดค่า</th>
+<th>ประเภท</th>
+<th>อายุจากปีที่ผลิต</th>    
+<th>วันที่เริ่มใช้งาน</th>
+<th>อยู่ในเกณฑ์</th>
 <th>รายละเอียด</th>
+<th>เพิ่มผู้ใช้งาน</th>
 </tr>
 </thead>
 
 <tbody>
+<?php 
 
-<?php $i=1; foreach($data as $row): 
+// 🔥 เพิ่มตรงนี้ (ก่อน foreach)
+$shared = ['cctv','printer','projector'];
+
+$i= $offset + 1; 
+foreach($data as $row):
 
 $spec = $row['spec']." | ".$row['ram']." | ".$row['ssd']." | ".$row['gpu'];
 
@@ -244,7 +320,7 @@ $age = $row['How_long2'];
 if(empty($row['yfm_2'])){
     $grade = "<span class='badge bg-secondary'>ยังไม่ได้บันทึกข้อมูล</span>";
 }
-elseif((int)$age < 4){
+elseif((int)$age < 6){
     $grade = "<span class='badge bg-success'>A - ใช้งานได้ดี</span>";
 }
 elseif((int)$age <= 7){
@@ -255,95 +331,63 @@ else{
 }
 ?>
 
-<form method="post">
-
-<!-- 🔥 แก้ตรงนี้: ผูก hidden กับ form ปุ่ม save -->
-<input type="hidden" name="asset_id" form="form<?= $row['asset_id'] ?>" value="<?= $row['asset_id'] ?>">
-<input type="hidden" name="old_value" form="form<?= $row['asset_id'] ?>" value="<?= $row['machine_value'] ?>">
-<input type="hidden" name="old_y1" form="form<?= $row['asset_id'] ?>" value="<?= !empty($row['yfm_1']) ? substr($row['yfm_1'],0,7) : '' ?>">
-<input type="hidden" name="old_y2" form="form<?= $row['asset_id'] ?>" value="<?= !empty($row['yfm_2']) ? substr($row['yfm_2'],0,7) : '' ?>">
-
 <tr>
 
 <td><?= $i++ ?></td>
 <td><?= $row['user_employee'] ?></td>
 <td><?= $row['project'] ?></td>
 <td><?= $row['no_pc'] ?></td>
-
-
-
+<td><?= $row['type_equipment'] ?></td>
+<td><?= $row['How_long'] ?> ปี</td>
+<td><?= $row['How_long2'] ?> ปี</td>
 <td><?= $grade ?></td>
-
 <td>
 <button type="button" class="btn btn-info btn-sm"
         data-bs-toggle="modal"
-        data-bs-target="#detail<?= $i ?>">แก้ไข</button>
+        data-bs-target="#detail<?= $row['asset_id'] ?>">
+จัดการ
+</button>
 </td>
-<!-- 
 <td>
-<button type="button" class="btn btn-warning btn-sm"
-        data-bs-toggle="modal"
-        data-bs-target="#repair<?= $i ?>">ดู</button>
-</td> 
--->
+<?php if(in_array(strtolower($row['type_equipment']), $shared)): ?>
 
-</form>
-
-<td>
-
-<form method="post" id="form<?= $row['asset_id'] ?>">
-
-<input type="hidden" name="asset_id" value="<?= $row['asset_id'] ?>">
-<input type="hidden" name="old_value" value="<?= $row['machine_value'] ?>">
-<input type="hidden" name="old_y1" value="<?= !empty($row['yfm_1']) ? substr($row['yfm_1'],0,7) : '' ?>">
-<input type="hidden" name="old_y2" value="<?= !empty($row['yfm_2']) ? substr($row['yfm_2'],0,7) : '' ?>">
-
-<button type="button"
-        class="btn btn-primary btn-sm btn-save"
-        data-form="form<?= $row['asset_id'] ?>">
-💾
+<button class="btn btn-warning btn-sm"
+data-bs-toggle="modal"
+data-bs-target="#assignUser<?= $row['asset_id'] ?>">
+นำมาใช้งาน
 </button>
 
-</form>
+<?php else: ?>
 
-</td>
+<button class="btn btn-success btn-sm"
+data-bs-toggle="modal"
+data-bs-target="#assignUser<?= $row['asset_id'] ?>">
+เพิ่มผู้ใช้งาน
+</button>
 
-<!-- CONFIRM MODAL -->
-<div class="modal fade" id="confirmModal">
-<div class="modal-dialog modal-dialog-centered">
-<div class="modal-content">
+<?php endif; ?>
 
-<div class="modal-header bg-primary text-white">
-<h5>ยืนยันการบันทึก</h5>
-<button class="btn-close" data-bs-dismiss="modal"></button>
-</div>
+</tr>
 
-<div class="modal-body">
-
-<div id="changeSummary" style="font-size:14px"></div>
-
-</div>
-
-<div class="modal-footer">
-<button class="btn btn-secondary" data-bs-dismiss="modal">ยกเลิก</button>
-<button id="confirmSaveBtn" class="btn btn-primary">ยืนยันบันทึก</button>
-</div>
-
-</div>
-</div>
-</div>
-
-<!-- MODAL DETAIL -->
-<div class="modal fade" id="detail<?= $i ?>">
+<!-- =====================================================
+🔥 MODAL (แก้ใหม่ทั้งหมด)
+===================================================== -->
+<div class="modal fade" id="detail<?= $row['asset_id'] ?>">
 <div class="modal-dialog modal-lg modal-dialog-centered">
 <div class="modal-content">
 
+<!-- ✅ form อยู่ใน modal -->
+<form method="post">
+
 <div class="modal-header">
-<h5>📄 รายละเอียดอุปกรณ์</h5>
+<h5>📄 แก้ไขข้อมูลอุปกรณ์</h5>
 <button class="btn-close" data-bs-dismiss="modal"></button>
 </div>
 
 <div class="modal-body">
+
+<!-- ✅ ส่ง id -->
+<input type="hidden" name="asset_id" value="<?= $row['asset_id'] ?>">
 
 <div class="detail-grid">
 
@@ -368,13 +412,17 @@ else{
 </div>
 
 <div class="detail-box">
-<b>วันที่เริ่ม CPU</b>
-<?= $row['yfm_1'] ?>
+<b>📅 (กรุณาเลือก) ปีที่เริ่มผลิต อ้างอิงจากสเปคเครื่อง</b>
+<input type="text" name="yfm_1"
+class="form-control y1"
+value="<?= !empty($row['yfm_1']) ? substr($row['yfm_1'],0,7) : '' ?>">
 </div>
 
 <div class="detail-box">
-<b>วันที่ซื้อเครื่อง</b>
-<?= $row['yfm_2'] ?>
+<b>🛒 (กรุณาเลือก) วันที่เริ่มใช้งาน</b>
+<input type="text" name="yfm_2"
+class="form-control y2"
+value="<?= !empty($row['yfm_2']) ? substr($row['yfm_2'],0,7) : '' ?>">
 </div>
 
 <div class="detail-box">
@@ -383,89 +431,121 @@ else{
 </div>
 
 <div class="detail-box">
-<b>📊 อายุการใช้งานจริง</b>
+<b>📊 อายุใช้งาน</b>
 <div><?= $row['How_long2'] ?> ปี</div>
 </div>
 
-<div class="detail-box">
-<b>💰 มูลค่าเครื่อง (กรอกข้อมูล)</b>
-<input type="number" name="machine_value" form="form<?= $row['asset_id'] ?>"
-class="form-control" value="<?= $row['machine_value'] ?>">
-</div>
+<!-- ================= INPUT ================= -->
 
 <div class="detail-box">
-<b>📅 CPU เริ่มใช้งาน (กรอกข้อมูล)</b>
-<input type="text" name="yfm_1" form="form<?= $row['asset_id'] ?>"
-class="form-control y1"
-value="<?= !empty($row['yfm_1']) ? substr($row['yfm_1'],0,7) : '' ?>">
-</div>
-
-<div class="detail-box">
-<b>🛒 วันที่ซื้อ (กรอกข้อมูล)</b>
-<input type="text" name="yfm_2" form="form<?= $row['asset_id'] ?>"
-class="form-control y2"
-value="<?= !empty($row['yfm_2']) ? substr($row['yfm_2'],0,7) : '' ?>">
+<b>💰 มูลค่าเครื่อง (โดยประมานการ)</b>
+<input type="number" name="machine_value"
+class="form-control"
+value="<?= $row['machine_value'] ?>">
 </div>
 
 </div>
 
 </div>
 
+<!-- ================= FOOTER ================= -->
+<div class="modal-footer">
+
+<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+ปิด
+</button>
+
+<!-- ✅ ปุ่มบันทึกอยู่ใน modal -->
+<button type="submit" name="save" class="btn btn-primary">
+💾 บันทึก
+</button>
+
+</div>
+
+</form>
+<!-- ✅ จบ form -->
+
 </div>
 </div>
 </div>
 
-<!-- ================= MODAL REPAIR ================= -->
-<div class="modal fade" id="repair<?= $i ?>">
-<div class="modal-dialog modal-lg modal-dialog-centered">
+<!-- =====================================================
+🔥 MODAL เพิ่มผู้ใช้งาน (ใหม่)
+===================================================== -->
+<div class="modal fade" id="assignUser<?= $row['asset_id'] ?>">
+<div class="modal-dialog modal-dialog-centered">
 <div class="modal-content">
 
-<div class="modal-header bg-warning">
-<h5>🛠 ประวัติการซ่อม</h5>
+<form method="post">
+
+<!-- HEADER -->
+<div class="modal-header" style="background:linear-gradient(135deg,#0d6efd,#0dcaf0);color:white;">
+<h5>👤 เพิ่มผู้ใช้งาน</h5>
 <button class="btn-close" data-bs-dismiss="modal"></button>
 </div>
 
-<div class="modal-body repair-clean">
+<!-- BODY -->
+<div class="modal-body">
 
-<div class="repair-head">
-    <div>
-        <h5 class="mb-0"><?= $row['no_pc'] ?></h5>
-        <small class="text-muted"><?= $row['project'] ?></small>
-    </div>
-    <div class="badge bg-primary px-3 py-2">
-        <?= $row['user_employee'] ?>
-    </div>
+<input type="hidden" name="asset_id" value="<?= $row['asset_id'] ?>">
+
+<div class="mb-3">
+<label>รหัสอุปกรณ์</label>
+<input type="text" class="form-control" value="<?= $row['no_pc'] ?>" readonly>
 </div>
 
-<div class="repair-grid-clean">
+<div class="mb-3">
+<label>ผู้ใช้งาน</label>
+<!-- 🔥 input + search -->
+<input list="userList"
+       name="user_employee"
+       class="form-control"
+       placeholder="พิมพ์ชื่อผู้ใช้งาน..."
+       required>
 
-<div class="item">
-<label>Spec เครื่อง</label>
-<div><?= $spec ?></div>
+<!-- 🔥 datalist -->
+<datalist id="userList">
+<?php foreach($userList as $u): ?>
+    <option value="<?= $u ?>">
+<?php endforeach; ?>
+</datalist>
 </div>
 
-<div class="item">
-<label>วันที่ซื้อ</label>
-<div><?= $row['yfm_2'] ?: '-' ?></div>
-</div>
+<?php
+$dupCheck = $conn->prepare("
+SELECT u.user_employee, a.project
+FROM IT_user_information u
+JOIN IT_assets a ON a.asset_id=u.asset_id
+WHERE u.user_employee=?
+");
+$dupCheck->execute([$row['user_employee']]);
+$dupData = $dupCheck->fetch(PDO::FETCH_ASSOC);
 
-<div class="item">
-<label>CPU อายุ</label>
-<div><?= $row['How_long'] ?> ปี</div>
-</div>
-
-<div class="item">
-<label>อายุใช้งาน</label>
-<div><?= $row['How_long2'] ?> ปี</div>
-</div>
-
-</div>
-
-<div class="repair-footer">
-<button class="btn btn-outline-primary">ถัดไป →</button>
-</div>
+if($dupData){
+    echo "<div class='alert alert-danger'>
+    ❌ คนนี้ใช้งานอยู่ที่โครงการ: {$dupData['project']}
+    </div>";
+}
+?>
 
 </div>
+
+<!-- FOOTER -->
+<div class="modal-footer">
+
+<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+ยกเลิก
+</button>
+
+<button type="submit" name="save_user"
+class="btn btn-primary"
+onclick="return confirm('ยืนยันเพิ่มผู้ใช้งาน ?')">
+💾 บันทึก
+</button>
+
+</div>
+
+</form>
 
 </div>
 </div>
@@ -474,6 +554,7 @@ value="<?= !empty($row['yfm_2']) ? substr($row['yfm_2'],0,7) : '' ?>">
 <?php endforeach; ?>
 
 </tbody>
+
 </table>
 
 <!-- PAGINATION -->

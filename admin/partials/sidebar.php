@@ -20,7 +20,7 @@
                 <li class="nav-item">
                     <a class="nav-link" href="#">➕ เพิ่มอุปกรณ์</a>
                 </li>
-
+<!-- 
                 <li class="nav-item">
                     <a class="nav-link" href="service_life_view.php">📋 รายการอุปกรณ์</a>
                 </li>
@@ -29,7 +29,7 @@
                     <a class="nav-link" href="admin_transfer_create.php">ส่งมอบอุปกรณ์</a>
                 </li>
 
-                <!-- 🔹 แยกเมนู Import ออกเป็น 2 หัวข้อ -->
+               🔹 แยกเมนู Import ออกเป็น 2 หัวข้อ -->
 
                 <li class="nav-item">
                     <a class="nav-link" href="import_employee.php">

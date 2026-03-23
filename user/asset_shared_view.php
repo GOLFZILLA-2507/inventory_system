@@ -104,6 +104,9 @@ FROM IT_user_information u
 WHERE 
 LTRIM(RTRIM(u.user_project)) = LTRIM(RTRIM(?))
 
+/* 🔥 เพิ่มตรงนี้: ไม่เอา SHARED */
+AND (u.user_type_equipment IS NULL OR u.user_type_equipment <> 'SHARED')
+
 /* ===============================
 ต้องมีผู้ใช้งานเท่านั้น ถึงแสดงผล
 =============================== */

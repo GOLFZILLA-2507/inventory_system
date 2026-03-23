@@ -39,96 +39,13 @@ if(isset($_POST['save'])){
     $stmt->execute([$value,$date1,$how1,$date2,$how2,$id]);
 
     // ✅ กัน refresh submit ซ้ำ
-    header("Location: asset_all.php?success=1");
+    header("Location: service_life_view.php?success=1");
     exit();
 }
-
-    /* ================= SAVE USER (เพิ่มใหม่) ================= */
-if(isset($_POST['save_user'])){
-
-    $asset_id = $_POST['asset_id'];
-    $user_emp = trim($_POST['user_employee']);
-    $target_project = $_POST['target_project'] ?? null;
-
-    // 🔥 หา type ของ asset
-    $asset = $conn->prepare("
-        SELECT type_equipment 
-        FROM IT_assets 
-        WHERE asset_id=?
-    ");
-    $asset->execute([$asset_id]);
-    $assetData = $asset->fetch(PDO::FETCH_ASSOC);
-
-    $type = strtolower(trim($assetData['type_equipment']));
-
-    // 🔥 ประเภทใช้ร่วม
-    $shared = ['cctv','printer','projector'];
-
-    /* ==============================
-       🔴 กันซ้ำในโครงการเดียวกัน
-    ============================== */
-    $dup = $conn->prepare("
-        SELECT 1
-        FROM IT_user_information
-        WHERE user_project=? 
-        AND asset_id=?
-    ");
-    $dup->execute([$target_project,$asset_id]);
-
-    if($dup->fetch()){
-        header("Location: asset_all.php?error=duplicate");
-        exit();
-    }
-
-    /* ==============================
-       🔵 แยก logic
-    ============================== */
-    if(in_array($type, $shared)){
-
-        // 🔵 อุปกรณ์ใช้ร่วม → ไม่มี user
-        $stmt = $conn->prepare("
-            INSERT INTO IT_user_information
-            (asset_id,user_project,user_type_equipment)
-            VALUES(?,?,?)
-        ");
-        $stmt->execute([$asset_id,$target_project,'SHARED']);
-
-    }else{
-
-        // 🔴 อุปกรณ์หลัก → ต้องมี user
-        if(empty($user_emp)){
-            header("Location: asset_all.php?error=nouser");
-            exit();
-        }
-
-        $stmt = $conn->prepare("
-            INSERT INTO IT_user_information
-            (asset_id,user_employee,user_project)
-            VALUES(?,?,?)
-        ");
-        $stmt->execute([$asset_id,$user_emp,$target_project]);
-    }
-
-    header("Location: asset_all.php?success=1");
-    exit();
-}
-
 
 /* ================= FILTER ================= */
 $typeList = $conn->query("SELECT DISTINCT type_equipment FROM IT_assets ORDER BY type_equipment")->fetchAll(PDO::FETCH_ASSOC);
-/* 🔥 เพิ่มตรงนี้ */
-$userList = $conn->query("
-SELECT fullname 
-FROM Employee
-ORDER BY fullname
-")->fetchAll(PDO::FETCH_COLUMN);
-
-$projList = $conn->query("
-SELECT DISTINCT site 
-FROM Employee
-WHERE site IS NOT NULL
-ORDER BY site
-")->fetchAll(PDO::FETCH_ASSOC);
+$projList = $conn->query("SELECT DISTINCT project FROM IT_assets ORDER BY project")->fetchAll(PDO::FETCH_ASSOC);
 
 /* ================= MAIN QUERY ================= */
 $sql = "
@@ -143,9 +60,7 @@ a.yfm_1,a.How_long,
 a.yfm_2,a.How_long2,
 u.user_employee
 FROM IT_assets a
-LEFT JOIN IT_user_information u 
-ON u.asset_id = a.asset_id
-AND (u.user_type_equipment IS NULL OR u.user_type_equipment <> 'SHARED')
+LEFT JOIN IT_user_information u ON u.asset_id=a.asset_id
 WHERE 1=1
 ";
 
@@ -173,9 +88,6 @@ $sql.=" ORDER BY a.project OFFSET $offset ROWS FETCH NEXT $limit ROWS ONLY";
 $stmt=$conn->prepare($sql);
 $stmt->execute($params);
 $data=$stmt->fetchAll(PDO::FETCH_ASSOC);
-if(empty($data)){
-    echo "<div class='alert alert-warning text-center'>⚠️ ไม่พบอุปกรณ์ในโครงการนี้</div>";
-}
 
 include 'partials/header.php';
 include 'partials/sidebar.php';
@@ -265,25 +177,6 @@ body{font-family:'Sarabun';font-size:14px;background:#eef6ff;}
     margin-top:25px;
     text-align:right;
 }
-/* 🔥 modal ฟ้าๆ สวย */
-.modal-content{
-    border-radius:12px;
-    box-shadow:0 10px 25px rgba(0,0,0,0.15);
-}
-
-.modal-header{
-    border-top-left-radius:12px;
-    border-top-right-radius:12px;
-}
-
-.btn-primary{
-    background:linear-gradient(135deg,#0d6efd,#0dcaf0);
-    border:none;
-}
-
-.btn-primary:hover{
-    opacity:0.9;
-}
 </style>
 
 <div class="container mt-4">
@@ -294,11 +187,6 @@ body{font-family:'Sarabun';font-size:14px;background:#eef6ff;}
 </div>
 
 <div class="card-body">
-<?php if(isset($_GET['error']) && $_GET['error']=='duplicate'): ?>
-<div class="alert alert-danger text-center">
-❌ คนนี้มีอุปกรณ์ในโครงการนี้อยู่แล้ว
-</div>
-<?php endif; ?>
 
 <!-- FILTER -->
 <form class="row mb-3">
@@ -308,7 +196,7 @@ body{font-family:'Sarabun';font-size:14px;background:#eef6ff;}
 
 <div class="col-md-3">
 <select name="type" class="form-control">
-<option value="">-- ทุกประเภท --</option>
+<option value="">-- ประเภท --</option>
 <?php foreach($typeList as $t): ?>
 <option value="<?= $t['type_equipment'] ?>" <?= $type==$t['type_equipment']?'selected':'' ?>>
 <?= $t['type_equipment'] ?>
@@ -319,10 +207,10 @@ body{font-family:'Sarabun';font-size:14px;background:#eef6ff;}
 
 <div class="col-md-3">
 <select name="project" class="form-control">
-<option value="">-- โครงการทั้งหมด --</option>
+<option value="">-- ทั้งหมด --</option>
 <?php foreach($projList as $p): ?>
-<option value="<?= $p['site'] ?>">
-<?= $p['site'] ?>
+<option value="<?= $p['project'] ?>" <?= $proj==$p['project']?'selected':'' ?>>
+<?= $p['project'] ?>
 </option>
 <?php endforeach; ?>
 </select>
@@ -340,23 +228,14 @@ body{font-family:'Sarabun';font-size:14px;background:#eef6ff;}
 <th>ผู้ใช้</th>
 <th>โครงการ</th>
 <th>รหัส</th>
-<th>ประเภท</th>
-<th>อายุจากปีที่ผลิต</th>    
-<th>วันที่เริ่มใช้งาน</th>
-<th>อยู่ในเกณฑ์</th>
+<th>เกณฑ์</th>
 <th>รายละเอียด</th>
-<th>เพิ่มผู้ใช้งาน</th>
 </tr>
 </thead>
 
 <tbody>
-<?php 
 
-// 🔥 เพิ่มตรงนี้ (ก่อน foreach)
-$shared = ['cctv','printer','projector'];
-
-$i= $offset + 1; 
-foreach($data as $row):
+<?php $i=1; foreach($data as $row): 
 
 $spec = $row['spec']." | ".$row['ram']." | ".$row['ssd']." | ".$row['gpu'];
 
@@ -382,10 +261,9 @@ else{
 <td><?= $row['user_employee'] ?></td>
 <td><?= $row['project'] ?></td>
 <td><?= $row['no_pc'] ?></td>
-<td><?= $row['type_equipment'] ?></td>
-<td><?= $row['How_long'] ?> ปี</td>
-<td><?= $row['How_long2'] ?> ปี</td>
+
 <td><?= $grade ?></td>
+
 <td>
 <button type="button" class="btn btn-info btn-sm"
         data-bs-toggle="modal"
@@ -393,28 +271,6 @@ else{
 จัดการ
 </button>
 </td>
-<td>
-<?php 
-// 🔥 แก้ตรงนี้: กัน error + normalize ค่า
-$type = strtolower(trim($row['type_equipment'])); 
-if(in_array($type, $shared)): 
-?>
-
-<button class="btn btn-warning btn-sm"
-data-bs-toggle="modal"
-data-bs-target="#assignUser<?= $row['asset_id'] ?>">
-นำมาใช้งาน
-</button>
-
-<?php else: ?>
-
-<button class="btn btn-success btn-sm"
-data-bs-toggle="modal"
-data-bs-target="#assignUser<?= $row['asset_id'] ?>">
-เพิ่มผู้ใช้งาน
-</button>
-
-<?php endif; ?>
 
 </tr>
 
@@ -513,88 +369,6 @@ value="<?= $row['machine_value'] ?>">
 
 </form>
 <!-- ✅ จบ form -->
-
-</div>
-</div>
-</div>
-
-<!-- =====================================================
-🔥 MODAL เพิ่มผู้ใช้งาน (ใหม่)
-===================================================== -->
-<div class="modal fade" id="assignUser<?= $row['asset_id'] ?>">
-<div class="modal-dialog modal-dialog-centered">
-<div class="modal-content">
-
-<form method="post">
-
-<!-- HEADER -->
-<div class="modal-header" style="background:linear-gradient(135deg,#0d6efd,#0dcaf0);color:white;">
-<h5>👤 เพิ่มผู้ใช้งาน</h5>
-<button class="btn-close" data-bs-dismiss="modal"></button>
-</div>
-
-<!-- BODY -->
-<div class="modal-body">
-
-<input type="hidden" name="asset_id" value="<?= $row['asset_id'] ?>">
-
-<div class="mb-3">
-<label>รหัสอุปกรณ์</label>
-<input type="text" class="form-control" value="<?= $row['no_pc'] ?>" readonly>
-</div>
-
-<div class="mb-3">
-<label>ผู้ใช้งาน</label>
-<!-- 🔥 input + search -->
-<input list="userList"
-       name="user_employee"
-       class="form-control"
-       placeholder="พิมพ์ชื่อผู้ใช้งาน..."
-       required>
-
-<!-- 🔥 datalist -->
-<datalist id="userList">
-<?php foreach($userList as $u): ?>
-    <option value="<?= $u ?>">
-<?php endforeach; ?>
-</datalist>
-
-<!-- 🔥 เลือกโครงการ -->
-<div class="mb-3">
-<label>โครงการปลายทาง</label>
-<select name="target_project" class="form-control" required>
-<option value="">-- เลือกโครงการ --</option>
-<?php foreach($projList as $p): ?>
-<option value="<?= $p['site'] ?>"><?= $p['site'] ?></option>
-<?php endforeach; ?>
-</select>
-</div>
-</div>
-
-<?php if(!in_array($type, $shared)): ?>
-
-
-
-<?php endif; ?>
-
-</div>
-
-<!-- FOOTER -->
-<div class="modal-footer">
-
-<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-ยกเลิก
-</button>
-
-<button type="submit" name="save_user"
-class="btn btn-primary"
-onclick="return confirm('ยืนยันเพิ่มผู้ใช้งาน ?')">
-💾 บันทึก
-</button>
-
-</div>
-
-</form>
 
 </div>
 </div>
