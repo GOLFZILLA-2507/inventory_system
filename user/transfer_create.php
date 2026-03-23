@@ -51,7 +51,26 @@ return $stmt->fetchColumn() > 0;
 
 
 /* ===============================
-รวม asset ทั้งหมด
+🔥 ฟังก์ชันเช็คซ้ำ (เพิ่มใหม่)
+=============================== */
+function checkDuplicate($conn,$no_pc,$site){
+
+    $stmt = $conn->prepare("
+    SELECT TOP 1 to_site, sent_transfer
+    FROM IT_AssetTransfer_Headers
+    WHERE no_pc = ?
+    AND from_site = ?
+    AND (transfer_status IS NULL OR transfer_status != 'ยกเลิก')
+    ORDER BY transfer_id DESC
+    ");
+
+    $stmt->execute([$no_pc,$site]);
+    return $stmt->fetch(PDO::FETCH_ASSOC);
+}
+
+
+/* ===============================
+รวม asset ทั้งหมด (เหมือนเดิม)
 =============================== */
 $assets = [];
 
@@ -79,7 +98,6 @@ $assets[$code] = [
 }
 }
 
-
 /* ================= Monitor ================= */
 $monitors = [
 $row['user_monitor1'],
@@ -99,9 +117,7 @@ $assets[$m] = [
 ];
 
 }
-
 }
-
 
 /* ================= UPS ================= */
 if(!empty($row['user_ups'])){
@@ -119,8 +135,7 @@ $assets[$ups] = [
 }
 }
 
-
-/* ================= MULTI (comma) ================= */
+/* ================= MULTI ================= */
 $multiFields = [
 'user_cctv' => 'CCTV',
 'user_nvr' => 'NVR',
@@ -148,9 +163,7 @@ $assets[$item] = [
 ];
 
 }
-
 }
-
 
 /* ================= SINGLE ================= */
 $singleFields = [
@@ -178,11 +191,8 @@ $assets[$val] = [
 ];
 
 }
-
 }
-
 }
-
 }
 
 
@@ -200,6 +210,50 @@ echo "<script>alert('กรุณาเลือกอุปกรณ์');</scr
 }
 else{
 
+/* ===============================
+🔥 ตรวจรายการซ้ำก่อน
+=============================== */
+$duplicates = [];
+
+foreach($items as $aid){
+
+    if(isset($assets[$aid])){
+
+        $a = $assets[$aid];
+
+        $dup = checkDuplicate($conn,$a['no_pc'],$site);
+
+        if($dup){
+            $duplicates[] = [
+                'code' => $a['no_pc'],
+                'to' => $dup['to_site'],
+                'round' => $dup['sent_transfer']
+            ];
+        }
+    }
+}
+
+/* ===============================
+🔥 ถ้ามีซ้ำ → แจ้งเตือน + หยุด
+=============================== */
+if(!empty($duplicates)){
+
+    $msg = "❌ พบรายการซ้ำ\n\n";
+
+    foreach($duplicates as $d){
+        $msg .= "รหัส: ".$d['code']."\n";
+        $msg .= "เคยส่งไป: ".$d['to']."\n";
+        $msg .= "รอบที่: ".$d['round']."\n\n";
+    }
+
+    echo "<script>alert(".json_encode($msg).");</script>";
+    return;
+}
+
+
+/* ===============================
+นับรอบส่งโอนย้าย
+=============================== */
 $stmtRound = $conn->prepare("
 SELECT ISNULL(MAX(sent_transfer),0)+1 AS round_transfer
 FROM IT_AssetTransfer_Headers
@@ -209,9 +263,13 @@ $r = $stmtRound->fetch(PDO::FETCH_ASSOC);
 
 $sent_transfer = $r['round_transfer'];
 
+
+/* ===============================
+INSERT (เหมือนเดิม)
+=============================== */
 $stmt = $conn->prepare("
 INSERT INTO IT_AssetTransfer_Headers
-(sent_transfer,transfer_type,from_site,to_site,created_by,transfer_status,new_no,no_pc,details,spec,ssd,ram,gpu,type)
+(sent_transfer,transfer_type,from_site,to_site,created_by,admin_status,new_no,no_pc,details,spec,ssd,ram,gpu,type)
 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 ");
 
@@ -221,13 +279,17 @@ if(isset($assets[$aid])){
 
 $a = $assets[$aid];
 
+/* 🔥 กันซ้ำอีกชั้น */
+$dup = checkDuplicate($conn,$a['no_pc'],$site);
+if($dup) continue;
+
 $stmt->execute([
 $sent_transfer,
 $type,
 $site,
 $to,
 $user,
-'รอตรวจรับ',
+'รออนุมัติ',
 $a['new_no'] ?? '',
 $a['no_pc'] ?? '',
 $a['details'] ?? '',
@@ -239,10 +301,9 @@ $a['type'] ?? ''
 ]);
 
 }
-
 }
 
-header("Location: transfer_list.php?success=1");
+header("Location: transfer_create.php?success=1");
 exit;
 
 }

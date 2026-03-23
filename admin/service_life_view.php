@@ -228,15 +228,8 @@ body{font-family:'Sarabun';font-size:14px;background:#eef6ff;}
 <th>ผู้ใช้</th>
 <th>โครงการ</th>
 <th>รหัส</th>
-<th>มูลค่า</th>
-<th>CPU อายุ</th>
-<th>ปี</th>
-<th>ซื้อ</th>
-<th>ปีใช้งาน</th>
 <th>วัดค่า</th>
 <th>รายละเอียด</th>
-<!--<th>ซ่อม</th>-->
-<th>บันทึก</th>
 </tr>
 </thead>
 
@@ -277,33 +270,14 @@ else{
 <td><?= $row['project'] ?></td>
 <td><?= $row['no_pc'] ?></td>
 
-<td>
-<input type="number" name="machine_value" form="form<?= $row['asset_id'] ?>"
-       class="form-control" value="<?= $row['machine_value'] ?>">
-</td>
 
-<td>
-<input type="text" name="yfm_1" form="form<?= $row['asset_id'] ?>"
-       class="form-control y1"
-       value="<?= !empty($row['yfm_1']) ? substr($row['yfm_1'],0,7) : '' ?>">
-</td>
-
-<td><?= $row['How_long'] ?> ปี</td>
-
-<td>
-<input type="text" name="yfm_2" form="form<?= $row['asset_id'] ?>"
-       class="form-control y2"
-       value="<?= !empty($row['yfm_2']) ? substr($row['yfm_2'],0,7) : '' ?>">
-</td>
-
-<td><?= $row['How_long2'] ?> ปี</td>
 
 <td><?= $grade ?></td>
 
 <td>
 <button type="button" class="btn btn-info btn-sm"
         data-bs-toggle="modal"
-        data-bs-target="#detail<?= $i ?>">ดู</button>
+        data-bs-target="#detail<?= $i ?>">แก้ไข</button>
 </td>
 <!-- 
 <td>
@@ -394,16 +368,6 @@ else{
 </div>
 
 <div class="detail-box">
-<b>CPU อายุ</b>
-<?= $row['How_long'] ?> ปี
-</div>
-
-<div class="detail-box">
-<b>อายุใช้งานจริง</b>
-<?= $row['How_long2'] ?> ปี
-</div>
-
-<div class="detail-box">
 <b>วันที่เริ่ม CPU</b>
 <?= $row['yfm_1'] ?>
 </div>
@@ -414,13 +378,33 @@ else{
 </div>
 
 <div class="detail-box">
-<label>มูลค่าเครื่อง</label>
-<div class="price"><?= number_format($row['machine_value']) ?> บาท</div>
+<b>⏳ อายุ CPU</b>
+<div><?= $row['How_long'] ?> ปี</div>
 </div>
 
 <div class="detail-box">
-<b><label>วัดค่า</label></b>
-<div class="#"><?= $grade ?></div>
+<b>📊 อายุการใช้งานจริง</b>
+<div><?= $row['How_long2'] ?> ปี</div>
+</div>
+
+<div class="detail-box">
+<b>💰 มูลค่าเครื่อง (กรอกข้อมูล)</b>
+<input type="number" name="machine_value" form="form<?= $row['asset_id'] ?>"
+class="form-control" value="<?= $row['machine_value'] ?>">
+</div>
+
+<div class="detail-box">
+<b>📅 CPU เริ่มใช้งาน (กรอกข้อมูล)</b>
+<input type="text" name="yfm_1" form="form<?= $row['asset_id'] ?>"
+class="form-control y1"
+value="<?= !empty($row['yfm_1']) ? substr($row['yfm_1'],0,7) : '' ?>">
+</div>
+
+<div class="detail-box">
+<b>🛒 วันที่ซื้อ (กรอกข้อมูล)</b>
+<input type="text" name="yfm_2" form="form<?= $row['asset_id'] ?>"
+class="form-control y2"
+value="<?= !empty($row['yfm_2']) ? substr($row['yfm_2'],0,7) : '' ?>">
 </div>
 
 </div>
@@ -474,12 +458,7 @@ else{
 <label>อายุใช้งาน</label>
 <div><?= $row['How_long2'] ?> ปี</div>
 </div>
-<!--
-<div class="item full">
-<label>มูลค่าเครื่อง</label>
-<div class="price"><?= number_format($row['machine_value']) ?> บาท</div>
-</div>
--->
+
 </div>
 
 <div class="repair-footer">

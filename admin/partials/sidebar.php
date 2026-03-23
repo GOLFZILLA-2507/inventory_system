@@ -26,11 +26,7 @@
                 </li>
 
                 <li class="nav-item">
-                    <a class="nav-link" href="repair_manage.php">🛠 จัดการแจ้งซ่อม</a>
-                </li>
-
-                <li class="nav-item">
-                    <a class="nav-link" href="#">🔁 โอนย้ายอุปกรณ์</a>
+                    <a class="nav-link" href="admin_transfer_create.php">ส่งมอบอุปกรณ์</a>
                 </li>
 
                 <!-- 🔹 แยกเมนู Import ออกเป็น 2 หัวข้อ -->

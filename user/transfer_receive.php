@@ -119,6 +119,7 @@ COUNT(*) AS total_items,
 MAX(status) AS status
 FROM IT_AssetTransfer_Headers
 WHERE to_site = ?
+AND (receive_status IS NULL OR receive_status != 'ยกเลิก')
 GROUP BY sent_transfer,from_site
 ORDER BY sent_transfer DESC
 ");

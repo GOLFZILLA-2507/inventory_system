@@ -96,6 +96,16 @@ continue;
 
 if(in_array($id,$checked)){
 
+// 🔥 เช็คก่อนว่า admin อนุมัติหรือยัง
+if($row['admin_status'] != 'อนุมัติ'){
+
+    echo "<script>
+    alert('❌ รายการนี้ยังไม่ได้รับการอนุมัติจาก Admin');
+    window.history.back();
+    </script>";
+    exit;
+}
+
 /* update header */
 
 $stmt = $conn->prepare("
