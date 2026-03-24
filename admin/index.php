@@ -9,8 +9,10 @@ require_once '../config/checklogin.php';
 
 // 🔥 รออนุมัติ
 $pending = $conn->query("
-SELECT COUNT(*) FROM IT_AssetTransfer_Headers
+SELECT COUNT(*) 
+FROM IT_AssetTransfer_Headers
 WHERE admin_status = 'รออนุมัติ'
+AND (receive_status IS NULL OR receive_status != 'ยกเลิก')
 ")->fetchColumn();
 
 // 🔥 แจ้งซ่อม (สมมุติ table repair)
@@ -26,8 +28,9 @@ WHERE user_employee IS NULL
 
 // 🔥 ส่งแล้ว
 $sent = $conn->query("
-SELECT COUNT(*) FROM IT_AssetTransfer_Headers
-WHERE admin_status = 'อนุมัติ'
+SELECT COUNT(DISTINCT sent_transfer)
+FROM IT_AssetTransfer_Headers
+WHERE sent_transfer IS NOT NULL
 ")->fetchColumn();
 
 // 🔥 รอตรวจรับ
@@ -179,11 +182,53 @@ const ctx = document.getElementById('chart');
 new Chart(ctx, {
     type: 'bar',
     data: {
-        labels: ['รออนุมัติ','ซ่อม','ไม่มีผู้ใช้','ส่งแล้ว','รอตรวจรับ'],
+        labels: ['รออนุมัติ','ซ่อม','ไม่มีผู้ใช้','โอนย้ายทั้งหมด'],
         datasets: [{
-            label: 'จำนวน',
-            data: [<?= $pending ?>,<?= $repair ?>,<?= $noUser ?>,<?= $sent ?>,<?= $waiting ?>]
+            label: 'จำนวนรายการ',
+            data: [<?= $pending ?>,<?= $repair ?>,<?= $sent ?>,<?= $waiting ?>],
+
+            /* 🔥 สีแท่ง */
+            backgroundColor: [
+                'rgba(163, 183, 238, 0.8)',   // เหลือง
+                'rgba(68, 211, 247, 0.8)',  // ฟ้า
+                'rgba(155, 223, 146, 0.8)', // เทา
+                'rgba(100, 211, 159, 0.8)',   // เขียว
+                'rgba(209, 107, 170, 0.8)'    // แดง
+            ],
+
+            borderColor: [
+                '#2503b9',
+                '#0dcaf0',
+                '#6c757d',
+                '#198754',
+                '#dc3545'
+            ],
+
+            borderWidth: 1,
+            borderRadius: 8,   // 🔥 มุมโค้ง
+            barThickness: 200   // 🔥 ความหนา
         }]
+    },
+
+    options: {
+        responsive: true,
+        plugins: {
+            legend: {
+                labels: {
+                    font: {
+                        size: 14
+                    }
+                }
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                ticks: {
+                    stepSize: 1
+                }
+            }
+        }
     }
 });
 </script>

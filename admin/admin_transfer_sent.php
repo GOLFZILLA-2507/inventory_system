@@ -3,14 +3,19 @@ require_once '../config/connect.php';
 require_once '../config/checklogin.php';
 
 /* =====================================================
-🔥 filter site (default = สำนักงานใหญ่)
+🔥 PARAM
 ===================================================== */
-$filter_site = $_GET['site'] ?? 'สำนักงานใหญ่';
+$filter_site = $_GET['site'] ?? 'ทุกโครงการ'; // filter โครงการ
+$status = $_GET['status'] ?? ''; // filter สถานะ
+
+$page = $_GET['page'] ?? 1; // pagination
+$limit = 15; // จำนวนรายการต่อหน้า
+$offset = ($page - 1) * $limit; // คำนวณ offset สำหรับ SQL
 
 /* =====================================================
-🔥 โหลดรายการที่ admin อนุมัติ
+🔥 สร้าง SQL (สำคัญมาก)
 ===================================================== */
-$stmt = $conn->prepare("
+$sql = "
 SELECT 
     sent_transfer,
     from_site,
@@ -20,19 +25,34 @@ SELECT
     MIN(transfer_date) AS transfer_date,
     COUNT(*) AS total_items,
 
-    SUM(CASE WHEN receive_status='รับแล้ว' THEN 1 ELSE 0 END) AS received_items
+    MAX(receive_status) AS receive_status,
+    MAX(admin_status) AS admin_status
 
-FROM IT_AssetTransfer_Headers
+    FROM IT_AssetTransfer_Headers
+    WHERE sent_transfer IS NOT NULL
 
-WHERE admin_status = 'อนุมัติ'
+    AND (
+        ? = 'ทุกโครงการ'
+        OR from_site = ?
+    )
+    ";
 
--- 🔥 filter
-AND (
-    ? = 'ทุกโครงการ'
-    OR from_site = ?
-    OR to_site = ?
-)
-
+/* =====================================================
+🔥 filter สถานะ (ต้องอยู่นอก SQL เท่านั้น)
+===================================================== */
+    if($status == 'cancel'){
+        $sql .= " AND receive_status = 'ยกเลิก' ";
+    }
+    elseif($status == 'waiting'){
+        $sql .= " AND admin_status = 'รออนุมัติ' ";
+    }
+    elseif($status == 'received'){
+        $sql .= " AND receive_status = 'รับแล้ว' ";
+    }
+/* =====================================================
+🔥 GROUP + PAGINATION
+===================================================== */
+$sql .= "
 GROUP BY 
     sent_transfer,
     from_site,
@@ -40,10 +60,22 @@ GROUP BY
     transfer_type
 
 ORDER BY sent_transfer DESC
-");
+OFFSET $offset ROWS FETCH NEXT $limit ROWS ONLY
+";
 
+/* =====================================================
+🔥 EXECUTE
+===================================================== */
+$stmt = $conn->prepare($sql);
 $stmt->execute([$filter_site,$filter_site,$filter_site]);
 $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+$siteList = $conn->query("
+SELECT DISTINCT from_site 
+FROM IT_AssetTransfer_Headers
+WHERE from_site IS NOT NULL
+ORDER BY from_site
+")->fetchAll(PDO::FETCH_COLUMN);
 
 include 'partials/header.php';
 include 'partials/sidebar.php';
@@ -67,7 +99,7 @@ include 'partials/sidebar.php';
 <div class="card shadow">
 
 <div class="card-header">
-📦 รายการส่งจาก Admin (ส่งมอบให้หน้างาน)
+📦 ประวัตการโอนย้าย/ส่งมอบ อุปกรณ์
 </div>
 
 <div class="card-body">
@@ -80,18 +112,32 @@ include 'partials/sidebar.php';
 </div>
 
 <div class="col-md-4">
-<form method="get">
+<form method="get" class="row">
+
+<div class="col-md-6">
 <select name="site" class="form-control" onchange="this.form.submit()">
 
-<option value="ทุกโครงการ" <?= $filter_site=='ทุกโครงการ'?'selected':'' ?>>
-ทุกโครงการ
-</option>
+<option value="ทุกโครงการ">ทุกโครงการ</option>
 
-<option value="สำนักงานใหญ่" <?= $filter_site=='สำนักงานใหญ่'?'selected':'' ?>>
-สำนักงานใหญ่
+<?php foreach($siteList as $s): ?>
+<option value="<?= $s ?>" <?= $filter_site==$s?'selected':'' ?>>
+<?= $s ?>
 </option>
+<?php endforeach; ?>
 
 </select>
+</div>
+
+<div class="col-md-6">
+<select name="status" class="form-control" onchange="this.form.submit()">
+<option value="">-- ทุกสถานะ --</option>
+<option value="waiting" <?= $status=='waiting'?'selected':'' ?>>รออนุมัติ</option>
+<option value="received" <?= $status=='received'?'selected':'' ?>>รับแล้ว</option>
+<option value="cancel" <?= $status=='cancel'?'selected':'' ?>>ยกเลิก</option>
+
+</select>
+</div>
+
 </form>
 </div>
 
@@ -115,7 +161,7 @@ include 'partials/sidebar.php';
 
 <tbody id="tableBody">
 
-<?php $i=1; foreach($data as $d): ?>
+<?php $i = $offset + 1; foreach($data as $d): ?>
 
 <tr>
 
@@ -128,11 +174,13 @@ include 'partials/sidebar.php';
 </td>
 
 <td class="from">
+    <span class="badge bg-gray text-dark">
 <?= htmlspecialchars($d['from_site']) ?>
+</span>
 </td>
 
 <td class="to">
-<span class="badge bg-info">
+<span class="badge bg-gray text-dark">
 <?= htmlspecialchars($d['to_site']) ?>
 </span>
 </td>
@@ -149,14 +197,17 @@ include 'partials/sidebar.php';
 
 <td>
 <?php
-if($d['received_items'] == $d['total_items']){
-    echo "<span class='badge bg-success'>✅ รับครบแล้ว</span>";
+if($d['receive_status'] == 'ยกเลิก'){
+    echo "<span class='badge bg-danger'>❌ ยกเลิก</span>";
 }
-elseif($d['received_items'] > 0){
-    echo "<span class='badge bg-warning text-dark'>📦 รับบางส่วน</span>";
+elseif($d['admin_status'] == 'รออนุมัติ'){
+    echo "<span class='badge bg-warning text-dark'>⏳ รออนุมัติ</span>";
+}
+elseif($d['receive_status'] == 'รับแล้ว'){
+    echo "<span class='badge bg-success'>✅ รับแล้ว</span>";
 }
 else{
-    echo "<span class='badge bg-secondary'>⏳ ยังไม่รับ</span>";
+    echo "<span class='badge bg-secondary'>ไม่ทราบสถานะ</span>";
 }
 ?>
 </td>
@@ -176,32 +227,43 @@ class="btn btn-primary btn-sm">
 
 </table>
 
+<!-- 🔥 PAGINATION -->
+<div class="text-center mt-3">
+
+<a href="?page=<?= max(1,$page-1) ?>&site=<?= $filter_site ?>&status=<?= $status ?>" 
+class="btn btn-primary">
+⬅ ย้อนกลับ
+</a>
+
+<span class="mx-3">หน้า <?= $page ?></span>
+
+<a href="?page=<?= $page+1 ?>&site=<?= $filter_site ?>&status=<?= $status ?>" 
+class="btn btn-primary">
+ถัดไป ➡
+</a>
+
+</div>
+
 </div>
 </div>
 </div>
 
 <?php include 'partials/footer.php'; ?>
 
-<!-- 🔍 SEARCH SCRIPT -->
 <script>
 const search = document.getElementById("search");
 const rows = document.querySelectorAll("#tableBody tr");
 
 search.addEventListener("keyup", function(){
-
 let keyword = this.value.toLowerCase();
 
 rows.forEach(row=>{
-
 let round = row.querySelector(".round").innerText.toLowerCase();
 let from = row.querySelector(".from").innerText.toLowerCase();
 let to   = row.querySelector(".to").innerText.toLowerCase();
 
 let match = round.includes(keyword) || from.includes(keyword) || to.includes(keyword);
-
 row.style.display = match ? "" : "none";
-
 });
-
 });
 </script>

@@ -3,13 +3,14 @@ require_once '../config/connect.php';
 require_once '../config/checklogin.php';
 
 /* ================= PARAM ================= */
-$search = $_GET['search'] ?? '';
-$type   = $_GET['type'] ?? '';
-$proj   = $_GET['project'] ?? '';
-$page   = $_GET['page'] ?? 1;
+$search = $_GET['search'] ?? ''; //ฟิลเตอร์ค้นหา (รหัส, ผู้ใช้, โครงการ)
+$type   = $_GET['type'] ?? ''; //ฟิลเตอร์ประเภท (PC, Monitor, Printer, etc.)
+$proj   = $_GET['project'] ?? ''; //ฟิลเตอร์โครงการ
+$page   = $_GET['page'] ?? 1;   //ฟิลเตอร์หน้า
+$status = $_GET['status'] ?? ''; //ฟิลเตอร์สถานะ (used/free)
 
-$limit  = 15;
-$offset = ($page-1)*$limit;
+$limit  = 15; //จำนวนรายการต่อหน้า
+$offset = ($page-1)*$limit; //คำนวณ offset สำหรับ pagination
 
 /* ================= SAVE ================= */
 if(isset($_POST['save'])){
@@ -211,31 +212,41 @@ a.yfm_2,a.How_long2,
 u.user_employee
 FROM IT_assets a
 LEFT JOIN IT_user_information u 
-ON u.asset_id = a.asset_id
+ ON (
+    u.asset_id = a.asset_id 
+    OR u.user_no_pc = a.no_pc
+)
 AND (u.user_type_equipment IS NULL OR u.user_type_equipment <> 'SHARED')
 WHERE 1=1
 ";
 
 $params = [];
 
-if($search!=''){
+if($search!=''){ //ฟิลเตอร์ค้นหา (รหัส, ผู้ใช้, โครงการ)
     $sql.=" AND (a.no_pc LIKE ? OR u.user_employee LIKE ? OR a.project LIKE ?)";
     $params[]="%$search%";
     $params[]="%$search%";
     $params[]="%$search%";
 }
 
-if($type!=''){
+if($type!=''){ //ฟิลเตอร์ประเภท (PC, Monitor, Printer, etc.)
     $sql.=" AND a.type_equipment=?";
     $params[]=$type;
 }
 
-if($proj!=''){
+if($proj!=''){ //ฟิลเตอร์โครงการ
     $sql.=" AND a.project=?";
     $params[]=$proj;
 }
+if($status == 'used'){ //ฟิลเตอร์สถานะ (มีผู้ใช้)
+    $sql .= " AND u.user_employee IS NOT NULL";
+}
 
-$sql.=" ORDER BY a.project OFFSET $offset ROWS FETCH NEXT $limit ROWS ONLY";
+if($status == 'free'){ //ฟิลเตอร์สถานะ (ยังไม่มีผู้ใช้)
+    $sql .= " AND u.user_employee IS NULL";
+}
+
+$sql.=" ORDER BY a.project OFFSET $offset ROWS FETCH NEXT $limit ROWS ONLY"; //pagination แบบ SQL Server (ถ้า MySQL ใช้ LIMIT $offset, $limit)
 
 $stmt=$conn->prepare($sql);
 $stmt->execute($params);
@@ -245,8 +256,7 @@ include 'partials/header.php';
 include 'partials/sidebar.php';
 ?>
 <?php
-// 🔥 เพิ่มตรงนี้
-$role = $_SESSION['role_ivt'] ?? '';
+$role = $_SESSION['role_ivt'] ?? ''; // ดึง role จาก session
 ?>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -361,15 +371,15 @@ body{font-family:'Sarabun';font-size:14px;background:#eef6ff;}
 </div>
 
 <div class="card-body">
-<?php if(isset($_GET['error']) && $_GET['error']=='duplicate'): ?>
+<?php if(isset($_GET['error']) && $_GET['error']=='duplicate'): ?> <!-- แก้ไข: error=duplicate -->
 <div class="alert alert-danger text-center">
 ❌ คนนี้มีอุปกรณ์ในโครงการนี้อยู่แล้ว
 </div>
 <?php endif; ?>
 
 <!-- FILTER -->
-<form class="row mb-3">
-<div class="col-md-3">
+<form class="row mb-3 g-2">
+<div class="col-md-9">
 <input name="search" id="searchBox" class="form-control" placeholder="ค้นหา..." value="<?= $search ?>">
 </div>
 
@@ -384,7 +394,15 @@ body{font-family:'Sarabun';font-size:14px;background:#eef6ff;}
 </select>
 </div>
 
-<div class="col-md-3">
+<div class="col-md-4">
+<select name="status" class="form-control">
+<option value="">-- สถานะทั้งอุปกรณ์ --</option>
+<option value="used" <?= $status=='used'?'selected':'' ?>>มีผู้ใช้</option>
+<option value="free" <?= $status=='free'?'selected':'' ?>>ยังไม่มีผู้ใช้</option>
+</select>
+</div>
+
+<div class="col-md-4">
 <select name="project" class="form-control">
 <option value="">-- โครงการทั้งหมด --</option>
 <?php foreach($projList as $p): ?>
@@ -395,7 +413,7 @@ body{font-family:'Sarabun';font-size:14px;background:#eef6ff;}
 </select>
 </div>
 
-<div class="col-md-3">
+<div class="col-md-4">
 <button class="btn btn-primary w-100">🔍 ค้นหา</button>
 </div>
 </form>
@@ -466,22 +484,31 @@ else{
 </td>
 
 <td>
-<?php 
-$type = strtolower(trim($row['type_equipment'])); 
-if(in_array($type, $shared)): 
-?>
-<button class="btn btn-warning btn-sm"
-data-bs-toggle="modal"
-data-bs-target="#assignUser<?= $row['asset_id'] ?>">
-นำมาใช้งาน
-</button>
+
+<?php if(empty($row['user_employee'])): ?>
+
+    <?php 
+    $type = strtolower(trim($row['type_equipment'])); 
+    if(in_array($type, $shared)): 
+    ?>
+    <button class="btn btn-warning btn-sm"
+    data-bs-toggle="modal"
+    data-bs-target="#assignUser<?= $row['asset_id'] ?>">
+    นำมาใช้งาน
+    </button>
+
+    <?php else: ?>
+    <button class="btn btn-success btn-sm"
+    data-bs-toggle="modal"
+    data-bs-target="#assignUser<?= $row['asset_id'] ?>">
+    เพิ่มผู้ใช้งาน
+    </button>
+    <?php endif; ?>
+
 <?php else: ?>
-<button class="btn btn-success btn-sm"
-data-bs-toggle="modal"
-data-bs-target="#assignUser<?= $row['asset_id'] ?>">
-เพิ่มผู้ใช้งาน
-</button>
+    <span class="text-muted">มีผู้ใช้งานแล้ว</span>
 <?php endif; ?>
+
 </td>
 
 <?php endif; ?>

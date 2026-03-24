@@ -27,6 +27,8 @@ if(isset($_POST['approve_selected'])){
 }
 
 
+
+
 /* =====================================================
 🔥 โหลดรายการทั้งหมดในรอบ
 ===================================================== */
@@ -39,6 +41,18 @@ ORDER BY transfer_id DESC
 $stmt->execute([$round]);
 $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+/* =====================================================
+🔥 เช็คว่ามีรายการยกเลิกในรอบนี้ไหม
+===================================================== */
+$stmtCancel = $conn->prepare("
+SELECT COUNT(*) 
+FROM IT_AssetTransfer_Headers
+WHERE sent_transfer = ?
+AND receive_status = 'ยกเลิก'
+");
+$stmtCancel->execute([$round]);
+
+$hasCancel = $stmtCancel->fetchColumn();
 
 /* =====================================================
 🔥 เช็คว่าอนุมัติครบหรือยัง
@@ -48,6 +62,7 @@ SELECT COUNT(*)
 FROM IT_AssetTransfer_Headers
 WHERE sent_transfer = ?
 AND admin_status != 'อนุมัติ'
+AND (receive_status IS NULL OR receive_status != 'ยกเลิก')
 ");
 $stmtCheck->execute([$round]);
 
@@ -122,11 +137,20 @@ input[type="checkbox"]{
 <div class="card-body">
 
 <!-- 🔥 แจ้งเตือน -->
-<?php if($remain == 0){ ?>
+<?php if($hasCancel > 0){ ?>
+
+<div class="alert alert-danger">
+❌ รอบรายการนี้มีรายการถูกยกเลิก
+</div>
+
+<?php } elseif($remain == 0){ ?>
+
 <div class="alert alert-success">
 ✅ อนุมัติครบทุกรายการแล้ว
 </div>
+
 <?php } ?>
+
 
 <form method="post">
 
@@ -150,11 +174,16 @@ input[type="checkbox"]{
 
 <?php foreach($data as $d){ ?>
 
+
+
 <tr>
 
 <td>
 
-<?php if($d['admin_status'] != 'อนุมัติ'){ ?>
+<?php 
+// ❗ ห้ามเลือกถ้า "ยกเลิก"
+if($d['admin_status'] != 'อนุมัติ' && $d['receive_status'] != 'ยกเลิก'){ 
+?>
 <input type="checkbox" 
 name="ids[]" 
 value="<?= $d['transfer_id'] ?>" 
@@ -177,16 +206,25 @@ class="item">
 
 <td>
 
-<?php if($d['admin_status'] == 'อนุมัติ'){ ?>
+<?php if($d['receive_status'] == 'ยกเลิก'){ ?>
+
+<span class="badge bg-danger">
+❌ ถูกยกเลิก
+</span>
+
+<?php } elseif($d['admin_status'] == 'อนุมัติ'){ ?>
+
 <span class="badge badge-success">
 ✅ อนุมัติแล้ว
 </span>
+
 <?php } else { ?>
+
 <span class="badge badge-warning">
 ⏳ รออนุมัติ
 </span>
-<?php } ?>
 
+<?php } ?>
 </td>
 
 </tr>
@@ -200,7 +238,7 @@ class="item">
 <div class="d-flex justify-content-between mt-3">
 
 <!-- 🔥 ปุ่มย้อนกลับ -->
-<a href="approve_transfer.php" class="btn btn-back">
+<a href="admin_transfer_sent.php" class="btn btn-back">
 ⬅️ ย้อนกลับ
 </a>
 
