@@ -1,3 +1,4 @@
+<?php $role = $_SESSION['role_ivt'] ?? ''; // กำหนดค่าเริ่มต้นเป็น 'user' หากไม่มี session ?>
 <?php
 require_once '../config/connect.php';
 require_once '../config/checklogin.php';
@@ -63,7 +64,7 @@ include 'partials/sidebar.php';
 .card-deep{background:linear-gradient(135deg,#0b5ed7,#1c7ed6);}
 .card-info{background:linear-gradient(135deg,#3bc9db,#66d9e8);}
 .card-indigo{background:linear-gradient(135deg,#364fc7,#5c7cfa);}
-.card-gray{background:linear-gradient(135deg,#495057,#868e96);}
+.card-gray{background:linear-gradient(135deg,#0dcaf0,#364fc7);}
 
 /* 🔴 แจ้งเตือน
 .blink{
@@ -82,6 +83,10 @@ include 'partials/sidebar.php';
 <h4 class="mb-4">📊 Admin Dashboard</h4>
 
 <div class="row g-3">
+
+<?php if($role == 'admin'): ?>
+
+<!-- ================= ADMIN เห็นทั้งหมด ================= -->
 
 <!-- 🔥 อนุมัติ -->
 <div class="col-md-4">
@@ -118,6 +123,39 @@ include 'partials/sidebar.php';
 <a href="asset_all.php" class="btn btn-light btn-sm">ดูทั้งหมด</a>
 </div>
 </div>
+
+<?php else: ?>
+
+<!-- ================= MD เห็นเฉพาะนี้ ================= -->
+
+<!-- 🔥 ซ่อม -->
+<div class="col-md-4">
+<div class="dashboard-card card-soft">
+<h5>🛠 รายการแจ้งซ่อม</h5>
+<h2><?= $repair ?></h2>
+<a href="repair_manage.php" class="btn btn-light btn-sm">ดูรายการ</a>
+</div>
+</div>
+
+<!-- 🔥 โอนย้าย -->
+<div class="col-md-4">
+<div class="dashboard-card card-info">
+<h5>📦 รายการส่งมอบและโอนย้ายทั้งหมด</h5>
+<h2><?= $sent ?></h2>
+<a href="admin_transfer_sent.php" class="btn btn-light btn-sm">ดูรายการ</a>
+</div>
+</div>
+
+<!-- 🔥 อุปกรณ์ -->
+<div class="col-md-4">
+<div class="dashboard-card card-gray">
+<h5>💻 อุปกรณ์ทั้งหมด</h5>
+<h2><?= $total ?></h2>
+<a href="asset_all.php" class="btn btn-light btn-sm">ดูทั้งหมด</a>
+</div>
+</div>
+
+<?php endif; ?>
 
 </div>
 

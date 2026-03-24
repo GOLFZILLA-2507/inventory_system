@@ -131,17 +131,11 @@ if(isset($_POST['submit'])){
     /* ================= ถ้ายังไม่มี → สร้างแถวเดียว ================= */
     if(!$current){
 
-        $stmtMax = $conn->prepare("SELECT MAX(asset_id) as max_id FROM IT_user_information");
-        $stmtMax->execute();
-        $max = $stmtMax->fetch(PDO::FETCH_ASSOC);
-
-        $new_id = ($max['max_id'] ?? 0) + 1;
-
         $conn->prepare("
         INSERT INTO IT_user_information 
-        (asset_id, user_project, user_type_equipment, user_record, user_update)
-        VALUES (?, ?, 'SHARED', ?, GETDATE())
-        ")->execute([$new_id, $site, $user]);
+        (user_project, user_type_equipment, user_record, user_update)
+        VALUES (?, 'SHARED', ?, GETDATE())
+        ")->execute([$site, $user]);
         // reload
         $stmt->execute([$site]);
         $current=$stmt->fetch(PDO::FETCH_ASSOC);

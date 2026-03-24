@@ -10,18 +10,19 @@ $loginUser = $_SESSION['fullname'];
    - ตอนแรกมาจาก GET
    - ตอน submit มาจาก POST
 ===================================================== */
-$asset_id = $_GET['asset_id'] ?? ($_POST['asset_id'] ?? 0);
+$transfer_id = $_GET['transfer_id'] ?? ($_POST['transfer_id'] ?? 0);
+$no_pc = $_GET['no_pc'] ?? ($_POST['no_pc'] ?? '');
 
 /* =====================================================
    โหลดข้อมูล asset
 ===================================================== */
 $stmt = $conn->prepare("
-SELECT *
-FROM IT_user_information
-WHERE asset_id = ?
+SELECT t.*, a.*
+FROM IT_AssetTransfer_Headers t
+LEFT JOIN IT_assets a ON a.no_pc = t.no_pc
+WHERE t.transfer_id = ?
 ");
-
-$stmt->execute([$asset_id]);
+$stmt->execute([$transfer_id]);
 $asset = $stmt->fetch(PDO::FETCH_ASSOC);
 
 /* =====================================================
@@ -41,50 +42,49 @@ $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ===================================================== */
 if(isset($_POST['save'])){
 
+    $transfer_id = $_POST['transfer_id'] ?? 0;
+    $no_pc = $_POST['no_pc'] ?? '';
     $user_employee = $_POST['user_employee'] ?? '';
-    $asset_id = $_POST['asset_id'] ?? 0;
 
-    if($asset_id > 0 && !empty($user_employee)){
+    // 🔥 เช็คใหม่ (ใช้ transfer_id แทน asset_id)
+    if(!empty($transfer_id) && !empty($no_pc) && !empty($user_employee)){
 
-        /* ===============================
-           ดึงข้อมูลของ user ที่เลือก
-        =============================== */
+        /* โหลด user */
         $stmtUser = $conn->prepare("
         SELECT position, site
         FROM Employee
         WHERE fullname = ?
         ");
-
         $stmtUser->execute([$user_employee]);
         $userData = $stmtUser->fetch(PDO::FETCH_ASSOC);
 
-        /* กันพัง */
         if(!$userData){
-            echo "<script>alert('ไม่พบข้อมูลผู้ใช้');</script>";
+            echo "<script>alert('ไม่พบผู้ใช้');</script>";
             exit;
         }
 
-        $user_position = $userData['position']; // ตำแหน่งของผู้ใช้
-        $user_project  = $userData['site'];     // โครงการของผู้ใช้
+        $user_position = $userData['position'];
+        $user_project  = $userData['site'];
 
-        /* ===============================
-           update ลง asset
-        =============================== */
-        $stmt = $conn->prepare("
-        UPDATE IT_user_information
-        SET 
-        user_employee = ?,   -- ชื่อผู้ใช้
-        user_position = ?,   -- ตำแหน่งของผู้ใช้
-        user_project  = ?    -- โครงการของผู้ใช้
-        WHERE asset_id = ?
-        ");
-
-        $stmt->execute([
+        /* 🔥 INSERT */
+        $conn->prepare("
+        INSERT INTO IT_user_information
+        (user_employee,user_position,user_project,user_no_pc,user_record,user_update)
+        VALUES (?,?,?,?,?,GETDATE())
+        ")->execute([
             $user_employee,
             $user_position,
             $user_project,
-            $asset_id
+            $no_pc,
+            $loginUser
         ]);
+
+        /* 🔥 UPDATE status */
+        $conn->prepare("
+        UPDATE IT_AssetTransfer_Headers
+        SET status='ถูกนำไปใช้แล้ว'
+        WHERE transfer_id=?
+        ")->execute([$transfer_id]);
 
         header("Location: asset_available.php");
         exit;
@@ -112,11 +112,12 @@ if(isset($_POST['save'])){
 <!-- =====================================================
      ส่ง asset_id ไปตอน submit (สำคัญมาก)
 ===================================================== -->
-<input type="hidden" name="asset_id" value="<?= $asset_id ?>">
+<input type="hidden" name="transfer_id" value="<?= $transfer_id ?>">
+<input type="hidden" name="no_pc" value="<?= $no_pc ?>">
 
 <div class="mb-3">
 <label>รหัสอุปกรณ์</label>
-<input class="form-control" value="<?= $asset['user_no_pc'] ?>" readonly>
+<input class="form-control" value="<?= $asset['no_pc'] ?>" readonly>
 </div>
 
 <div class="mb-3">

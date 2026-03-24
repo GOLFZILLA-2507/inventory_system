@@ -46,7 +46,6 @@ $emp  = $_POST['employee'] ?? null;
 $pos  = $_POST['position'] ?? null;
 $asset_id = $_POST['asset_id'] ?? null;
 $m1  = $_POST['monitor1'] ?? null;
-$m2  = $_POST['monitor2'] ?? null;
 $ups = $_POST['ups'] ?? null;
 
 /* 🔴 กัน assign ผิด */
@@ -98,10 +97,10 @@ if(!$userRow){
     INSERT INTO IT_user_information(
         user_employee,user_position,user_project,
         user_no_pc,user_new_no,user_equipment_details,
-        user_monitor1,user_monitor2, user_ups,
+        user_monitor1,user_ups,
         user_update,user_record
     )
-    VALUES(?,?,?,?,?,?,?,?, ?,GETDATE(),?)
+    VALUES(?,?,?,?,?,?,?, ?,GETDATE(),?)
     ");
 
     $stmt->execute([
@@ -112,7 +111,6 @@ if(!$userRow){
         $new_no,
         $equipment_details,
         $m1,
-        $m2,
         $ups,
         $user
     ]);
@@ -136,78 +134,40 @@ if(!empty($pc)){
     ")->execute([$pc,$new_no,$equipment_details,$userRow['id']]);
 }
 
-/* ================= MONITOR ================= */
+// 🔴 Monitor
+if(!empty($m1)){
 
-// 🔴 รวม monitor ทั้ง 2 ตัว
-$monitorsInput = [];
-
-if(!empty($m1)) $monitorsInput[] = $m1;
-if(!empty($m2)) $monitorsInput[] = $m2;
-
-// 🔴 loop ใส่ทีละตัว
-foreach($monitorsInput as $monitor){
-
-    // เช็คว่ามีครบยัง
     if(empty($userRow['user_monitor1'])){
-
-        $conn->prepare("
-        UPDATE IT_user_information 
-        SET user_monitor1=? 
-        WHERE id=?
-        ")->execute([$monitor,$userRow['id']]);
-
-        $userRow['user_monitor1'] = $monitor; // อัพค่าในตัวแปรด้วย
-
+        $field = 'user_monitor1';
     }elseif(empty($userRow['user_monitor2'])){
-
-        $conn->prepare("
-        UPDATE IT_user_information 
-        SET user_monitor2=? 
-        WHERE id=?
-        ")->execute([$monitor,$userRow['id']]);
-
-        $userRow['user_monitor2'] = $monitor;
-
-
+        $field = 'user_monitor2';
     }else{
-        echo "<script>alert('มีจอครบ 2 แล้ว');history.back();</script>";
+        echo "<script>alert('มีจอครบแล้ว');history.back();</script>";
         exit;
     }
 
-    // 🔴 อัพ asset หลัง assign สำเร็จ
     $conn->prepare("
-    UPDATE IT_assets 
-    SET use_it=?, project=?, [update]=GETDATE()
-    WHERE no_pc=?
-    ")->execute([$emp,$site,$monitor]);
+    UPDATE IT_user_information
+    SET $field=?
+    WHERE id=?
+    ")->execute([$m1,$userRow['id']]);
 }
 
-}
-
-/* ================= UPS ================= */
-
-// 🔴 ถ้ามี UPS ส่งมา
+// 🔴 UPS
 if(!empty($ups)){
 
-    // 🔴 ถ้ามี UPS อยู่แล้ว → กันซ้ำ
     if(!empty($userRow['user_ups'])){
         echo "<script>alert('มี UPS แล้ว');history.back();</script>";
         exit;
     }
 
-    // 🔥 UPDATE ลง field user_ups
     $conn->prepare("
     UPDATE IT_user_information
     SET user_ups=?
     WHERE id=?
     ")->execute([$ups,$userRow['id']]);
+}
 
-    // 🔥 update asset
-    $conn->prepare("
-    UPDATE IT_assets 
-    SET use_it=?, project=?, [update]=GETDATE()
-    WHERE no_pc=?
-    ")->execute([$emp,$site,$ups]);
 }
 
 /* ================= UPDATE asset ================= */
@@ -223,13 +183,13 @@ $conn->prepare("
 UPDATE IT_assets SET use_it=?, project=?, [update]=GETDATE()
 WHERE no_pc=?
 ")->execute([$emp,$site,$m1]);
-
 }
-if(!empty($m2)){
+
+if(!empty($ups)){
 $conn->prepare("
 UPDATE IT_assets SET use_it=?, project=?, [update]=GETDATE()
 WHERE no_pc=?
-")->execute([$emp,$site,$m2]);
+")->execute([$emp,$site,$ups]);
 }
 
 header("Location: asset_shared_view.php?success=1");

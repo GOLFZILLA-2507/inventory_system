@@ -83,12 +83,12 @@ include 'partials/sidebar.php';
 <form method="get">
 <select name="site" class="form-control" onchange="this.form.submit()">
 
-<option value="สำนักงานใหญ่" <?= $filter_site=='สำนักงานใหญ่'?'selected':'' ?>>
-สำนักงานใหญ่
-</option>
-
 <option value="ทุกโครงการ" <?= $filter_site=='ทุกโครงการ'?'selected':'' ?>>
 ทุกโครงการ
+</option>
+
+<option value="สำนักงานใหญ่" <?= $filter_site=='สำนักงานใหญ่'?'selected':'' ?>>
+สำนักงานใหญ่
 </option>
 
 </select>

@@ -60,7 +60,7 @@ function checkDuplicate($conn,$no_pc,$site){
     FROM IT_AssetTransfer_Headers
     WHERE no_pc = ?
     AND from_site = ?
-    AND (transfer_status IS NULL OR transfer_status != 'ยกเลิก')
+    AND (receive_status IS NULL OR receive_status != 'ยกเลิก')
     ORDER BY transfer_id DESC
     ");
 
@@ -302,8 +302,9 @@ $a['type'] ?? ''
 
 }
 }
+$itemsText = implode(",", $items);
 
-header("Location: transfer_create.php?success=1");
+header("Location: transfer_create.php?success=1&to=".$to."&items=".$itemsText);
 exit;
 
 }
@@ -411,6 +412,33 @@ $spec=$a['spec']." | ".$a['ram']." | ".$a['ssd']." | ".$a['gpu'];
 </div>
 </div>
 
+<!-- SUCCESS MODAL -->
+<div class="modal fade" id="successModal" tabindex="-1">
+<div class="modal-dialog modal-dialog-centered">
+<div class="modal-content border-0 shadow">
+
+<div class="modal-header text-white"
+style="background: linear-gradient(135deg,#198754,#20c997);">
+
+<h5 class="modal-title">✅ ส่งรายการสำเร็จ</h5>
+</div>
+
+<div class="modal-body text-center">
+
+<h5 class="mb-3 text-success">🎉 ส่งรายการเรียบร้อยแล้ว</h5>
+
+<div id="successDetail" style="font-size:14px;"></div>
+
+</div>
+
+<div class="modal-footer justify-content-center">
+<button class="btn btn-success px-4" data-bs-dismiss="modal">ปิด</button>
+</div>
+
+</div>
+</div>
+</div>
+
 <?php include 'partials/footer.php'; ?>
 
 <script>
@@ -428,4 +456,27 @@ counter.innerText=count;
 checkboxes.forEach(cb=>{
 cb.addEventListener("change",updateCount);
 });
+
+<?php if(isset($_GET['success'])): ?>
+
+let toSite = "<?= $_GET['to'] ?? '' ?>";
+let items = "<?= $_GET['items'] ?? '' ?>".split(",");
+
+// 🔥 แปลง list เป็น HTML
+let html = "<b>ส่งไปที่:</b> " + toSite + "<br><br>";
+html += "<b>รายการอุปกรณ์:</b><br>";
+
+items.forEach((i,index)=>{
+    if(i.trim() !== ""){
+        html += (index+1)+". "+i+"<br>";
+    }
+});
+
+document.getElementById("successDetail").innerHTML = html;
+
+// 🔥 แสดง modal
+let modal = new bootstrap.Modal(document.getElementById('successModal'));
+modal.show();
+
+<?php endif; ?>
 </script>

@@ -1,202 +1,183 @@
 <?php
 require_once '../config/connect.php';
 require_once '../config/checklogin.php';
-include 'partials/header.php';
-include 'partials/sidebar.php';
 
-// ตรวจสอบสิทธิ์ admin
-if ($_SESSION['role'] !== 'admin') {
-    header('Location: ../index.php');
-    exit;
+$admin = $_SESSION['fullname'] ?? 'admin';
+
+/* =====================================================
+   SUBMIT
+===================================================== */
+if(isset($_POST['save'])){
+
+    $no_pc = trim($_POST['no_pc'] ?? '');
+    $type  = $_POST['type_equipment'] ?? '';
+    $project = 'สำนักงานใหญ่'; // default value
+
+    $new_no = $_POST['new_no'] ?? null;
+    $details = $_POST['Equipment_details'] ?? null;
+    $spec = $_POST['spec'] ?? null;
+    $ssd  = $_POST['ssd'] ?? null;
+    $ram  = $_POST['ram'] ?? null;
+    $gpu  = $_POST['gpu'] ?? null;
+
+    /* ================= VALIDATE ================= */
+
+    if(empty($no_pc)){
+        echo "<script>alert('กรุณากรอกรหัสอุปกรณ์');</script>";
+    }
+    elseif(empty($type)){
+        echo "<script>alert('กรุณาเลือกประเภท');</script>";
+    }
+    else{
+
+        /* 🔥 กันรหัสซ้ำ */
+        $check = $conn->prepare("SELECT COUNT(*) FROM IT_assets WHERE no_pc=?");
+        $check->execute([$no_pc]);
+
+        if($check->fetchColumn() > 0){
+            echo "<script>alert('รหัสอุปกรณ์นี้มีในระบบแล้ว');</script>";
+        }else{
+
+            /* ================= INSERT ================= */
+            $stmt = $conn->prepare("
+            INSERT INTO IT_assets
+            (new_no,no_pc,Equipment_details,type_equipment,project,spec,ssd,ram,gpu,[update])
+            VALUES (?,?,?,?,?,?,?,?,?,GETDATE())
+            ");
+
+            $stmt->execute([
+                $new_no,
+                $no_pc,
+                $details,
+                $type,
+                $project,
+                $spec,
+                $ssd,
+                $ram,
+                $gpu
+            ]);
+
+            echo "<script>
+            alert('✅ บันทึกสำเร็จ');
+            window.location='asset_add.php';
+            </script>";
+        }
+    }
 }
 ?>
 
-<h2>➕ เพิ่มอุปกรณ์ IT</h2>
+<?php include 'partials/header.php'; ?>
+<?php include 'partials/sidebar.php'; ?>
 
-<form method="post" id="assetForm">
-
-<!-- ===================== -->
-<!-- ประเภทอุปกรณ์ -->
-<!-- ===================== -->
-<label>ประเภทอุปกรณ์</label>
-<select name="asset_type" id="asset_type" required onchange="toggleFields()">
-    <option value="">-- เลือกประเภท --</option>
-    <option value="PC">PC</option>
-    <option value="MONITOR">หน้าจอ</option>
-    <option value="NOTEBOOK">โน้ตบุ๊ค</option>
-    <option value="UPS">UPS</option>
-    <option value="PRINTER">Printer</option>
-    <option value="CCTV">CCTV</option>
-    <option value="PROJECTOR">โปรเจ็คเตอร์</option>
-</select>
-<br><br>
-
-<!-- ===================== -->
-<!-- ผู้ใช้งาน -->
-<!-- ===================== -->
-<label>ผู้ใช้งาน</label>
-<select name="employee_id" required>
-<?php
-// ดึงรายชื่อพนักงาน
-$stmt = $conn->query("SELECT id, fullname, EmployeeID FROM Employee WHERE active = 1");
-while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-    echo "<option value='{$row['id']}'>
-        {$row['fullname']} ({$row['EmployeeID']})
-    </option>";
+<style>
+.card-header{
+background: linear-gradient(135deg,#0d6efd,#4dabf7);
+color:white;
 }
-?>
-</select>
-<br><br>
-
-<!-- ===================== -->
-<!-- โครงการ -->
-<!-- ===================== -->
-<label>โครงการ</label>
-<select name="project_id" required>
-<?php
-// ดึงโครงการทั้งหมด
-$stmt = $conn->query("SELECT project_id, project_name FROM IT_Projects");
-while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-    echo "<option value='{$row['project_id']}'>
-        {$row['project_name']}
-    </option>";
+.btn-primary{
+background: linear-gradient(135deg,#0d6efd,#4dabf7);
+border:none;
 }
-?>
-</select>
-<br><br>
+</style>
 
-<!-- ===================== -->
-<!-- กลุ่มฟอร์ม PC / Notebook -->
-<!-- ===================== -->
-<div id="pc_fields" style="display:none; border:1px solid #ccc; padding:10px;">
-    <h4>ข้อมูลสเปคเครื่อง</h4>
+<div class="container mt-4">
 
-    CPU:
-    <input type="text" name="cpu_model" placeholder="เช่น i5-8500"><br>
+<div class="card shadow">
 
-    RAM (GB):
-    <input type="number" name="ram_gb"><br>
-
-    SSD / Storage (GB):
-    <input type="number" name="storage_gb"><br>
-
-    การ์ดจอ:
-    <input type="text" name="gpu_model" placeholder="เช่น GTX 1660"><br>
-
-    ปีที่เริ่มใช้งาน:
-    <input type="number" name="asset_year" placeholder="เช่น 2020"><br>
+<div class="card-header">
+<h5 class="mb-0">➕ เพิ่มอุปกรณ์ (Admin)</h5>
 </div>
 
-<!-- ===================== -->
-<!-- กลุ่มฟอร์ม อุปกรณ์ทั่วไป -->
-<!-- ===================== -->
-<div id="general_fields" style="display:none; border:1px solid #ccc; padding:10px;">
-    <h4>ข้อมูลอุปกรณ์</h4>
+<div class="card-body">
 
-    ปีที่ซื้อ:
-    <input type="number" name="purchase_year" placeholder="เช่น 2021"><br>
+<form method="post" onsubmit="return confirmSave()">
+
+<div class="row">
+
+<!-- 🔥 รหัส -->
+<div class="col-md-4 mb-3">
+<label>รหัสอุปกรณ์ *</label>
+<input type="text" name="no_pc" class="form-control" required>
 </div>
 
-<br>
-<button type="submit" name="save">💾 บันทึกอุปกรณ์</button>
+<!-- 🔥 ประเภท -->
+<div class="col-md-4 mb-3">
+<label>ประเภท *</label>
+<select name="type_equipment" class="form-control" required>
+<option value="">-- เลือกประเภท --</option>
+<option>PC</option>
+<option>Notebook</option>
+<option>All_In_One</option>
+<option>Monitor</option>
+<option>UPS</option>
+<option>CCTV</option>
+<option>NVR</option>
+<option>Printer</option>
+<option>Projector</option>
+<option>Audio Set</option>
+<option>Plotter</option>
+<option>Accessories IT</option>
+<option>Drone</option>
+<option>Optical Fiber</option>
+<option>Server</option>
+</select>
+</div>
+
+<!-- 🔥 โครงการ -->
+<div class="col-md-4 mb-3">
+<label>โครงการ *</label>
+<input type="text" name="project" class="form-control" value="สำนักงานใหญ่" readonly>
+</div>
+
+<!-- optional -->
+<div class="col-md-4 mb-3">
+<label>รหัสใหม่</label>
+<input type="text" name="new_no" class="form-control">
+</div>
+
+<div class="col-md-8 mb-3">
+<label>รายละเอียด</label>
+<input type="text" name="Equipment_details" class="form-control">
+</div>
+
+<div class="col-md-3 mb-3">
+<label>Spec</label>
+<input type="text" name="spec" class="form-control">
+</div>
+
+<div class="col-md-3 mb-3">
+<label>SSD</label>
+<input type="text" name="ssd" class="form-control">
+</div>
+
+<div class="col-md-3 mb-3">
+<label>RAM</label>
+<input type="text" name="ram" class="form-control">
+</div>
+
+<div class="col-md-3 mb-3">
+<label>GPU</label>
+<input type="text" name="gpu" class="form-control">
+</div>
+
+</div>
+
+<div class="text-end">
+<button class="btn btn-primary px-4" name="save">
+💾 บันทึก
+</button>
+</div>
+
 </form>
 
-<!-- ===================== -->
-<!-- JavaScript ควบคุมฟอร์ม -->
-<!-- ===================== -->
+</div>
+</div>
+</div>
+
 <script>
-// ฟังก์ชันแสดง/ซ่อนฟอร์ม
-function toggleFields() {
-
-    // อ่านค่าประเภทอุปกรณ์
-    const type = document.getElementById('asset_type').value;
-
-    // กล่องฟอร์ม
-    const pcFields = document.getElementById('pc_fields');
-    const generalFields = document.getElementById('general_fields');
-
-    // ซ่อนทั้งหมดก่อน
-    pcFields.style.display = 'none';
-    generalFields.style.display = 'none';
-
-    // ถ้าเลือก PC หรือ NOTEBOOK
-    if (type === 'PC' || type === 'NOTEBOOK') {
-        pcFields.style.display = 'block';
-    }
-    // อุปกรณ์อื่น
-    else if (type !== '') {
-        generalFields.style.display = 'block';
-    }
+function confirmSave(){
+    return confirm("ยืนยันการเพิ่มอุปกรณ์นี้ ?");
 }
 </script>
 
-<?php
-// =====================
-// บันทึกข้อมูล
-// =====================
-if (isset($_POST['save'])) {
-
-    // กำหนดค่าเริ่มต้นเป็น NULL
-    $cpu = $ram = $storage = $gpu = $asset_year = $purchase_year = null;
-
-    // ถ้าเป็น PC / NOTEBOOK
-    if ($_POST['asset_type'] === 'PC' || $_POST['asset_type'] === 'NOTEBOOK') {
-        $cpu = $_POST['cpu_model'];
-        $ram = $_POST['ram_gb'];
-        $storage = $_POST['storage_gb'];
-        $gpu = $_POST['gpu_model'];
-        $asset_year = $_POST['asset_year'];
-
-        // คำนวณอายุการใช้งาน
-        $usage_years = date('Y') - $asset_year;
-
-        // ตัดเกรด
-        if ($usage_years <= 3) {
-            $grade = 'A';
-            $replace = 0;
-        } elseif ($usage_years <= 5) {
-            $grade = 'B';
-            $replace = 0;
-        } else {
-            $grade = 'C';
-            $replace = 1;
-        }
-
-    } else {
-        // อุปกรณ์อื่น
-        $purchase_year = $_POST['purchase_year'];
-        $grade = null;
-        $replace = 0;
-    }
-
-    // SQL เพิ่มข้อมูล
-    $sql = "
-        INSERT INTO IT_Assets
-        (asset_type, employee_id, project_id,
-         cpu_model, ram_gb, storage_gb, gpu_model,
-         asset_year, purchase_year,
-         spec_grade, recommend_replace, status)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
-    ";
-
-    $stmt = $conn->prepare($sql);
-    $stmt->execute([
-        $_POST['asset_type'],
-        $_POST['employee_id'],
-        $_POST['project_id'],
-        $cpu,
-        $ram,
-        $storage,
-        $gpu,
-        $asset_year,
-        $purchase_year,
-        $grade,
-        $replace,
-        'ใช้งาน'
-    ]);
-
-    echo "<p style='color:green'>✅ เพิ่มอุปกรณ์เรียบร้อย</p>";
-}
-?>
-
-<?php include 'partials/footer.php'; ?>
+<?php include '../user/partials/footer.php'; ?>

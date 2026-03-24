@@ -31,12 +31,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['project_id'] = $user['project_id'];
 
             // เปลี่ยนเส้นทางไปยังหน้า dashboard
-            if($user['role_ivt']=='admin'){ 
-                echo "Hi Welcome Back Admin<br />";   
+            if($user['role_ivt']=='admin' || $user['role_ivt']=='MD'){ 
                 echo "<script>window.location='admin/index.php'; </script>";
             }
             else{
-                echo "Hi Welcome Back user<br />";   
                 echo "<script>window.location='user/asset_shared_view.php'; </script>";
             }
             exit();

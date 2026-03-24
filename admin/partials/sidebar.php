@@ -1,3 +1,4 @@
+<?php $role = $_SESSION['role_ivt'] ?? ''; // กำหนดค่าเริ่มต้นเป็น 'user' หากไม่มี session ?>
 <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
     <div class="container-fluid">
 
@@ -13,28 +14,15 @@
         <div class="collapse navbar-collapse" id="adminSidebar">
             <ul class="navbar-nav me-auto">
 
+                <!-- Dashboard (ทุก role เห็น) -->
                 <li class="nav-item">
                     <a class="nav-link" href="index.php">🏠 Dashboard</a>
                 </li>
 
+                <?php if($role != 'MD'): ?>
+                <!-- 🔴 admin เท่านั้น -->
                 <li class="nav-item">
-                    <a class="nav-link" href="#">➕ เพิ่มอุปกรณ์</a>
-                </li>
-<!-- 
-                <li class="nav-item">
-                    <a class="nav-link" href="service_life_view.php">📋 รายการอุปกรณ์</a>
-                </li>
-
-                <li class="nav-item">
-                    <a class="nav-link" href="admin_transfer_create.php">ส่งมอบอุปกรณ์</a>
-                </li>
-
-               🔹 แยกเมนู Import ออกเป็น 2 หัวข้อ -->
-
-                <li class="nav-item">
-                    <a class="nav-link" href="import_employee.php">
-                        👨 Import พนักงาน
-                    </a>
+                    <a class="nav-link" href="asset_add.php">➕ เพิ่มอุปกรณ์</a>
                 </li>
 
                 <li class="nav-item">
@@ -42,6 +30,7 @@
                         💻 Import อุปกรณ์
                     </a>
                 </li>
+                <?php endif; ?>
 
             </ul>
 
