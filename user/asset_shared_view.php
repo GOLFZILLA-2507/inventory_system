@@ -2,138 +2,112 @@
 require_once '../config/connect.php';
 require_once '../config/checklogin.php';
 
-/* =====================================================
-   ดึงชื่อโครงการของ user ที่ login
-===================================================== */
-
 $site = $_SESSION['site'];
 
-/* ===============================
-Dashboard Counter
-=============================== */
+/* =====================================================
+🔥 โหลดรายการที่ "โอนออกแล้ว + รับแล้ว"
+ใช้ตัวนี้ filter ทั้งหน้า
+===================================================== */
+$stmtT = $conn->prepare("
+SELECT no_pc
+FROM IT_AssetTransfer_Headers
+WHERE from_site = ?
+AND receive_status = 'รับแล้ว'
+");
+$stmtT->execute([$site]);
 
-// 1. อุปกรณ์ไม่มีผู้ใช้
+$transfered = array_map('trim',$stmtT->fetchAll(PDO::FETCH_COLUMN));
+
+/* =====================================================
+🔥 Dashboard
+===================================================== */
+
+// 🔴 ไม่มีผู้ใช้ (ดูจาก asset จริง)
 $stmt1 = $conn->prepare("
 SELECT COUNT(*) 
-FROM IT_user_information u
-
-WHERE u.user_project = ?
-AND u.user_employee IS NULL
-
-AND EXISTS (
-    SELECT 1
-    FROM IT_AssetTransfer_Headers t
-    WHERE 
-        t.to_site = ?
-        AND t.receive_status = 'รับแล้ว'
-        AND (
-            t.no_pc = u.user_no_pc OR
-            t.no_pc = u.user_monitor1 OR
-            t.no_pc = u.user_monitor2 OR
-            t.no_pc = u.user_ups OR
-            t.no_pc = u.user_cctv OR
-            t.no_pc = u.user_nvr OR
-            t.no_pc = u.user_printer OR
-            t.no_pc = u.user_projector OR
-            t.no_pc = u.user_audio_set OR
-            t.no_pc = u.user_plotter OR
-            t.no_pc = u.user_Accessories_IT OR
-            t.no_pc = u.user_Drone OR
-            t.no_pc = u.user_Optical_Fiber OR
-            t.no_pc = u.user_Server
-        )
-)
-        
+FROM IT_assets
+WHERE project = ?
+AND (use_it IS NULL OR use_it = '')
 ");
-$stmt1->execute([$site, $site]);
+$stmt1->execute([$site]);
 $count_no_user = $stmt1->fetchColumn();
 
-// 2. รายการที่ฉันส่ง
+// 🔴 ส่งออก
 $stmt2 = $conn->prepare("
-SELECT 
-    COUNT(*) AS total_items,
-    COUNT(DISTINCT sent_transfer) AS total_round
-FROM IT_AssetTransfer_Headers
+SELECT COUNT(*) FROM IT_AssetTransfer_Headers
 WHERE from_site = ?
 ");
 $stmt2->execute([$site]);
+$count_sent = $stmt2->fetchColumn();
 
-$sentData = $stmt2->fetch(PDO::FETCH_ASSOC);
-
-$count_sent = $sentData['total_items'];
-$count_round = $sentData['total_round'];
-
-// 3. ตรวจรับอุปกรณ์ (ปลายทาง)
+// 🔴 รอตรวจรับ
 $stmt3 = $conn->prepare("
-SELECT COUNT(*)
-FROM IT_AssetTransfer_Headers
+SELECT COUNT(*) FROM IT_AssetTransfer_Headers
 WHERE to_site = ?
 AND receive_status = 'รอตรวจรับ'
 ");
 $stmt3->execute([$site]);
 $count_receive = $stmt3->fetchColumn();
 
-// 4. งานซ่อม 
+// 🔴 ซ่อม
 $stmt4 = $conn->prepare("
-SELECT COUNT(*)
-FROM IT_RepairTickets
+SELECT COUNT(*) FROM IT_RepairTickets
 WHERE project = ?
 AND status != 'เสร็จแล้ว'
 ");
 $stmt4->execute([$site]);
 $count_repair = $stmt4->fetchColumn();
 
-
 /* =====================================================
-   โหลดข้อมูลอุปกรณ์พนักงาน
+🔥 โหลด user + JOIN asset
 ===================================================== */
-
-$userAssets = $conn->prepare("
+$stmt = $conn->prepare("
 SELECT 
     u.user_employee,
+    e.position, -- 🔥 เพิ่มตรงนี้
+
     u.user_no_pc,
-    u.user_type_equipment,
-    u.user_spec,
-    u.user_ram,
-    u.user_ssd,
-    u.user_gpu,
     u.user_monitor1,
     u.user_monitor2,
-    u.user_ups
+    u.user_ups,
+
+    a.type_equipment,
+    a.spec,
+    a.ram,
+    a.ssd,
+    a.gpu
+
 FROM IT_user_information u
-WHERE 
-LTRIM(RTRIM(u.user_project)) = LTRIM(RTRIM(?))
 
-/* 🔥 เพิ่มตรงนี้: ไม่เอา SHARED */
-AND (u.user_type_equipment IS NULL OR u.user_type_equipment <> 'SHARED')
+LEFT JOIN IT_assets a 
+ON a.no_pc = u.user_no_pc
 
-/* ===============================
-ต้องมีผู้ใช้งานเท่านั้น ถึงแสดงผล
-=============================== */
+LEFT JOIN Employee e
+ON e.fullname = u.user_employee
+
+WHERE u.user_project = ?
 AND u.user_employee IS NOT NULL
 AND LTRIM(RTRIM(u.user_employee)) <> ''
-
-/* ===============================
-ตัดเครื่องที่โอนออกไปแล้ว
-=============================== */
-AND NOT EXISTS (
-    SELECT 1
-    FROM IT_AssetTransfer_Headers t
-    WHERE t.no_pc = u.user_no_pc
-    AND t.from_site = ?
-    AND t.receive_status = 'รับแล้ว'
-    AND t.transfer_id = (
-        SELECT MAX(t2.transfer_id)
-        FROM IT_AssetTransfer_Headers t2
-        WHERE t2.no_pc = t.no_pc
-    )
-)
+AND (u.user_type_equipment IS NULL OR u.user_type_equipment <> 'SHARED')
 
 ORDER BY u.user_employee
 ");
+$stmt->execute([$site]);
+$userData = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-$userAssets->execute([$site,$site]);
-$userData = $userAssets->fetchAll(PDO::FETCH_ASSOC);
+/* =====================================================
+🔥 โหลด shared
+===================================================== */
+$stmtS = $conn->prepare("
+SELECT 
+user_cctv,user_nvr,user_projector,user_printer,
+user_audio_set,user_plotter,user_Accessories_IT,
+user_Drone,user_Optical_Fiber,user_Server
+FROM IT_user_information
+WHERE user_project = ?
+");
+$stmtS->execute([$site]);
+$sharedRows = $stmtS->fetchAll(PDO::FETCH_ASSOC);
 
 include 'partials/header.php';
 include 'partials/sidebar.php';
@@ -215,273 +189,125 @@ border:1px solid #000000;
 
 </div>
 
-
 <div class="card shadow">
-
 <div class="card-header">
-<h5 class="mb-0">📡 อุปกรณ์ภายในโครงการ <?= $site ?></h5>
+📡 อุปกรณ์ภายในโครงการ <?= $site ?>
 </div>
 
 <div class="card-body">
 
+<h6>👨‍💼 อุปกรณ์พนักงาน</h6>
 
-<!-- =====================================================
-     ตารางอุปกรณ์พนักงาน
-===================================================== -->
-
-<h6 class="text-success">👨‍💼 อุปกรณ์พนักงาน</h6>
-
-<table class="table table-bordered table-hover">
-
-<thead class="table-success text-center">
+<table class="table table-bordered text-center">
 <tr>
-<th style="width:60px">ลำดับ</th>
-<th>ชื่อผู้ใช้</th>
-<th>รหัสเครื่อง</th>
+<th>#</th>
+<th>ชื่อ</th>
+<th>ตำแหน่ง</th>
+<th>PC</th>
 <th>ประเภท</th>
 <th>Spec</th>
-<th>จอที่ 1</th>
-<th>จอที่ 2</th>
-<th>เครื่องสำรองไฟ</th>
-</tr>
-</thead>
-
-<tbody>
-
-<?php
-
-if(empty($userData)){
-?>
-
-<tr>
-<td colspan="8" class="text-center text-muted">
-ยังไม่บันทึกข้อมูล
-</td>
+<th>Monitor1</th>
+<th>Monitor2</th>
+<th>UPS</th>
 </tr>
 
 <?php
-}
-else{
-
 $i=1;
 
 foreach($userData as $u){
 
-$spec = trim(($u['user_spec'] ?? '').($u['user_ram'] ?? '').($u['user_ssd'] ?? '').($u['user_gpu'] ?? ''));
-
-if($spec==''){
-$spec = '<span class="empty-data">ยังไม่ได้บันทึกข้อมูล</span>';
+// ❌ ตัดของที่โอนแล้ว
+if(in_array(trim($u['user_no_pc']),$transfered)){
+    continue;
 }
-else{
-$spec = $u['user_spec']." | ".$u['user_ram']." | ".$u['user_ssd']." | ".$u['user_gpu'];
+
+$spec = trim(($u['spec'] ?? '').($u['ram'] ?? '').($u['ssd'] ?? '').($u['gpu'] ?? ''));
+
+if(!$spec){
+    $spec = '<span class="empty-data">ไม่มีข้อมูล</span>';
+}else{
+    $spec = "{$u['spec']} | {$u['ram']} | {$u['ssd']} | {$u['gpu']}";
 }
 ?>
 
 <tr>
+<td><?= $i++ ?></td>
+<td  class="text-start"><?= $u['user_employee'] ?></td>
 
-<td class="text-center"><?= $i++ ?></td>
+<td>
+<?= $u['position'] ?: '<span class="empty-data">ไม่มีข้อมูล</span>' ?>
+</td>
 
-<td><?= $u['user_employee'] ?></td>
-
-<td class="fw-bold text-primary"><?= $u['user_no_pc'] ?></td>
-
-<td><?= $u['user_type_equipment'] ?: '-' ?></td>
-
+<td><?= $u['user_no_pc'] ?></td>
+<td><?= $u['type_equipment'] ?></td>
 <td><?= $spec ?></td>
-
-<td><?= $u['user_monitor1'] ? $u['user_monitor1'] : '<span class="empty-data">ไม่มีข้อมูล</span>' ?></td>
-<td><?= $u['user_monitor2'] ? $u['user_monitor2'] : '<span class="empty-data">ไม่มีข้อมูล</span>' ?></td>
-<td><?= $u['user_ups'] ? $u['user_ups'] : '<span class="empty-data">ไม่มีข้อมูล</span>' ?></td>
-
+<td><?= $u['user_monitor1'] ?: '-' ?></td>
+<td><?= $u['user_monitor2'] ?: '-' ?></td>
+<td><?= $u['user_ups'] ?: '-' ?></td>
 </tr>
 
-<?php
-}
+<?php } ?>
 
-}
-?>
-
-</tbody>
 </table>
 
 <hr>
 
+<h6>📡 อุปกรณ์ใช้ร่วม</h6>
 
-<!-- =====================================================
-     ตารางอุปกรณ์ใช้ร่วม
-===================================================== -->
-
-<h6 class="text-success">📡 อุปกรณ์ใช้ร่วม</h6>
-
-<table class="table table-bordered table-hover">
-
-<thead class="table-success text-center">
-
+<table class="table table-bordered text-center">
 <tr>
-<th style="width:60px">ลำดับ</th>
+<th>#</th>
 <th>ประเภท</th>
 <th>รหัส</th>
 </tr>
 
-</thead>
-
-<tbody>
-
 <?php
-
-/* =====================================================
-   โหลดข้อมูล shared asset
-===================================================== */
-
-/* =====================================================
-   โหลดข้อมูล shared asset (เอามาทั้งหมดก่อน)
-===================================================== */
-
-$sqlShared = "
-SELECT
-    user_cctv,
-    user_nvr,
-    user_projector,
-    user_printer,
-    user_audio_set,
-    user_plotter,
-    user_Accessories_IT,
-    user_Drone,
-    user_Optical_Fiber,
-    user_Server
-FROM IT_user_information
-WHERE user_project = ?
-";
-
-$stmt = $conn->prepare($sqlShared);
-$stmt->execute([$site]);
-
-$rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-$stmt = $conn->prepare($sqlShared);
-$stmt->execute([$site, $site]);
-
-$rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-/* =====================================================
-   โหลดรายการที่ถูกโอนออกไปแล้ว (สำคัญมาก)
-===================================================== */
-
-$transferStmt = $conn->prepare("
-SELECT no_pc
-FROM IT_AssetTransfer_Headers
-WHERE from_site = ?
-AND receive_status = 'รับแล้ว'
-");
-
-$transferStmt->execute([$site]);
-
-$transferList = $transferStmt->fetchAll(PDO::FETCH_COLUMN);
-
-// แปลงเป็น array
-$transfered = array_map('trim', $transferList);
-
-/* =====================================================
-   map ประเภทอุปกรณ์
-===================================================== */
-
 $map = [
-
-'user_cctv' => 'CCTV',
-'user_nvr' => 'NVR',
-'user_projector' => 'Projector',
-'user_printer' => 'Printer',
-'user_audio_set' => 'Audio Set',
-'user_plotter' => 'Plotter',
-'user_Accessories_IT' => 'Accessories IT',
-'user_Drone' => 'Drone',
-'user_Optical_Fiber' => 'Optical Fiber',
-'user_Server' => 'Server'
-
+'user_cctv'=>'CCTV',
+'user_nvr'=>'NVR',
+'user_projector'=>'Projector',
+'user_printer'=>'Printer',
+'user_audio_set'=>'Audio Set',
+'user_plotter'=>'Plotter',
+'user_Accessories_IT'=>'Accessories IT',
+'user_Drone'=>'Drone',
+'user_Optical_Fiber'=>'Optical Fiber',
+'user_Server'=>'Server'
 ];
 
-$sharedData = [];
-$unique = [];
+$j=1;
+$unique=[];
 
-/* =====================================================
-   loop ข้อมูล
-===================================================== */
+foreach($sharedRows as $row){
 
-foreach($rows as $row){
-
-foreach($map as $field => $type){
+foreach($map as $field=>$type){
 
 if(empty($row[$field])) continue;
 
-$items = explode(',', $row[$field]);
-
-foreach($items as $code){
+foreach(explode(',',$row[$field]) as $code){
 
 $code = trim($code);
 
-// 🔥 ถ้าอุปกรณ์นี้ถูกโอนออกแล้ว → ไม่ต้องแสดง
-if(in_array($code, $transfered)){
-    continue;
-}
+// ❌ ตัดของที่โอนแล้ว
+if(in_array($code,$transfered)) continue;
 
-$key = $type.'-'.$code;
-
+$key = $type.$code;
 if(isset($unique[$key])) continue;
 
-$sharedData[] = [
-    'type'=>$type,
-    'code'=>$code
-];
-
-$unique[$key] = true;
-
-
-}
-
-}
-
-}
-
-/* =====================================================
-   แสดงผล
-===================================================== */
-
-$j=1;
-
-if(empty($sharedData)){
+$unique[$key]=1;
 ?>
 
 <tr>
-<td colspan="3" class="text-center text-muted">
-ยังไม่การบันทึกข้อมูล
-</td>
+<td><?= $j++ ?></td>
+<td><?= $type ?></td>
+<td><?= $code ?></td>
 </tr>
 
 <?php
 }
-else{
-
-foreach($sharedData as $s){
-?>
-
-<tr>
-
-<td class="text-center"><?= $j++ ?></td>
-
-<td><?= $s['type'] ?></td>
-
-<td class="fw-bold text-primary"><?= $s['code'] ?></td>
-
-</tr>
-
-<?php
 }
-
 }
-
 ?>
-
-</tbody>
 
 </table>
 

@@ -7,9 +7,21 @@ $round = $_GET['round'] ?? 0;
 /* โหลดรายการอุปกรณ์ในรอบนั้น */
 
 $stmt = $conn->prepare("
-SELECT *
-FROM IT_AssetTransfer_Headers
-WHERE sent_transfer = ?
+SELECT 
+    t.*,
+
+    a.type_equipment,
+    a.spec,
+    a.ram,
+    a.ssd,
+    a.gpu
+
+FROM IT_AssetTransfer_Headers t
+
+LEFT JOIN IT_assets a
+ON a.no_pc = t.no_pc
+
+WHERE t.sent_transfer = ?
 ");
 
 $stmt->execute([$round]);
@@ -49,7 +61,7 @@ include 'partials/sidebar.php';
 
 <td><?= $d['no_pc'] ?></td>
 
-<td><?= $d['type'] ?></td>
+<td><?= $d['type_equipment'] ?></td>
 
 <td>
 

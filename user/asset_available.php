@@ -68,6 +68,19 @@ background:#fff3cd;
 border-radius:6px;
 border:1px solid #000000;
 }
+
+.table-green thead{
+    background: linear-gradient(135deg,#198754,#20c997);
+    color:white;
+}
+
+.table-green tbody tr:hover{
+    background:#e9f7ef;
+}
+
+.badge-green{
+    background:#198754;
+}
 </style>
 
 <div class="container mt-4">
@@ -82,13 +95,14 @@ border:1px solid #000000;
 
 <div class="card-body">
 
-<table class="table table-bordered table-hover">
+<table class="table table-bordered table-green">
 
 <thead class="table-success text-center">
 <tr>
 <th>ลำดับ</th>
 <th>รหัสอุปกรณ์</th>
 <th>ประเภท</th>
+<th>Spec</th>
 <th>หมายเหตุ</th>
 <th>วันที่รับ</th>
 <th>จัดการ</th>
@@ -100,7 +114,7 @@ border:1px solid #000000;
 <?php if(empty($data)): ?>
 
 <tr>
-<td colspan="6" class="text-center text-muted">
+<td colspan="7" class="text-center text-muted">
 ไม่พบอุปกรณ์ที่ยังไม่มีผู้ใช้งาน
 </td>
 </tr>
@@ -121,6 +135,21 @@ border:1px solid #000000;
 <!-- 🔥 ประเภท -->
 <td class="text-center">
 <?= $d['type'] ?: '-' ?>
+</td>
+
+<td>
+<?php
+$specParts = array_filter([
+$d['spec'],
+$d['ram'],
+$d['ssd'],
+$d['gpu']
+]);
+
+echo empty($specParts)
+? '<span class="empty-data">ไม่มีข้อมูล</span>'
+: implode(' | ', $specParts);
+?>
 </td>
 
 <!-- 🔥 หมายเหตุ -->

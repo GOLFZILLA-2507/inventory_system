@@ -2,7 +2,68 @@
 require_once '../config/connect.php';
 require_once '../config/checklogin.php';
 
+/* ================= SAVE HISTORY ================= */
+function saveHistory($conn,$emp,$site,$action,$admin){
 
+    $stmt = $conn->prepare("
+    INSERT INTO IT_user_history (
+        asset_id,
+        user_employee,
+        user_project,
+        user_no_pc,
+        user_monitor1,
+        user_monitor2,
+        user_ups,
+        user_cctv,
+        user_nvr,
+        user_projector,
+        user_printer,
+        user_Service_life,
+        user_update,
+        user_audio_set,
+        user_plotter,
+        user_Accessories_IT,
+        user_Drone,
+        user_Optical_Fiber,
+        user_Server,
+        user_record,
+        original_id,
+        action_type,
+        created_at,
+        created_by
+    )
+    SELECT 
+        asset_id,
+        user_employee,
+        user_project,
+        user_no_pc,
+        user_monitor1,
+        user_monitor2,
+        user_ups,
+        user_cctv,
+        user_nvr,
+        user_projector,
+        user_printer,
+        user_Service_life,
+        user_update,
+        user_audio_set,
+        user_plotter,
+        user_Accessories_IT,
+        user_Drone,
+        user_Optical_Fiber,
+        user_Server,
+        user_record,
+        id,
+        ?,
+        GETDATE(),
+        ?
+    FROM IT_user_information
+    WHERE user_employee=? AND user_project=?
+    ");
+
+    $stmt->execute([$action,$admin,$emp,$site]);
+    
+}
 
 $site = $_SESSION['site'];
 $user = $_SESSION['fullname'];
@@ -116,9 +177,11 @@ if(!$userRow){
         $ups,
         $user
     ]);
-
+// 🔥 save history หลัง insert
+saveHistory($conn,$emp,$site,'assign',$user);
 }else{
-
+// 🔥 เก็บ history ก่อน update (สำคัญมาก)
+saveHistory($conn,$emp,$site,'before_update',$user);
 /* ================= UPDATE ================= */
 
 // 🔴 PC (ห้ามทับ)
@@ -135,6 +198,8 @@ if(!empty($pc)){
     WHERE id=?
     ")->execute([$pc,$new_no,$equipment_details,$userRow['id']]);
 }
+// 🔥 เก็บ history หลัง update
+saveHistory($conn,$emp,$site,'after_update',$user);
 
 /* ================= MONITOR ================= */
 

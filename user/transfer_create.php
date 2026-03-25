@@ -5,62 +5,49 @@ require_once '../config/checklogin.php';
 $site = $_SESSION['site'];
 $user = $_SESSION['fullname'];
 
-/* ===============================
-โหลดรายชื่อโครงการ
-=============================== */
+/* =====================================================
+🔥 โหลดโครงการ
+===================================================== */
 $stmt = $conn->prepare("
-SELECT DISTINCT site AS project_name
-FROM Employee
-WHERE site IS NOT NULL
-AND site <> ?
+SELECT DISTINCT site FROM Employee
+WHERE site IS NOT NULL AND site <> ?
 ORDER BY site
 ");
 $stmt->execute([$site]);
-$projects = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$projects = $stmt->fetchAll(PDO::FETCH_COLUMN);
 
-
-/* ===============================
-โหลดข้อมูล user asset
-=============================== */
+/* =====================================================
+🔥 โหลด user
+===================================================== */
 $stmt = $conn->prepare("
-SELECT *
-FROM IT_user_information
-WHERE user_project = ?
+SELECT * FROM IT_user_information WHERE user_project = ?
 ");
 $stmt->execute([$site]);
 $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-
-/* ===============================
-ฟังก์ชันเช็คว่า “ส่งออก + รับแล้ว”
-=============================== */
-function isSentAndReceived($conn,$no_pc,$site){
-
-$stmt = $conn->prepare("
-SELECT COUNT(*) 
-FROM IT_AssetTransfer_Headers
-WHERE no_pc = ?
-AND from_site = ?
-AND receive_status = 'รับแล้ว'
-");
-
-$stmt->execute([$no_pc,$site]);
-
-return $stmt->fetchColumn() > 0;
+/* =====================================================
+🔥 ดึงข้อมูล asset จาก table หลัก
+===================================================== */
+function getAssetInfo($conn,$no_pc){
+    $stmt = $conn->prepare("
+    SELECT no_pc,spec,ram,ssd,gpu,type_equipment
+    FROM IT_assets
+    WHERE no_pc = ?
+    ");
+    $stmt->execute([$no_pc]);
+    return $stmt->fetch(PDO::FETCH_ASSOC);
 }
 
-
-/* ===============================
-🔥 ฟังก์ชันเช็คซ้ำ (เพิ่มใหม่)
-=============================== */
-function checkDuplicate($conn,$no_pc,$site){
+/* =====================================================
+🔥 เช็คสถานะโอน (สำคัญมาก)
+===================================================== */
+function getTransferStatus($conn,$no_pc,$site){
 
     $stmt = $conn->prepare("
-    SELECT TOP 1 to_site, sent_transfer
+    SELECT TOP 1 to_site, receive_status
     FROM IT_AssetTransfer_Headers
     WHERE no_pc = ?
-    AND from_site = ?
-    AND (receive_status IS NULL OR receive_status != 'ยกเลิก')
+    AND from_site = ?   -- 🔥 ต้องเช็คจากต้นทาง
     ORDER BY transfer_id DESC
     ");
 
@@ -68,265 +55,218 @@ function checkDuplicate($conn,$no_pc,$site){
     return $stmt->fetch(PDO::FETCH_ASSOC);
 }
 
-
-/* ===============================
-รวม asset ทั้งหมด (เหมือนเดิม)
-=============================== */
+/* =====================================================
+🔥 รวม asset
+===================================================== */
 $assets = [];
 
 foreach($rows as $row){
 
-/* ================= PC ================= */
+// ===== PC =====
 if(!empty($row['user_no_pc'])){
 
-$code = trim($row['user_no_pc']);
+    $pc = trim($row['user_no_pc']);
+    $t = getTransferStatus($conn,$pc,$site);
 
-if(!isSentAndReceived($conn,$code,$site)){
+    // ❌ ถ้ารับแล้ว → ไม่แสดง
+    if($t && $t['receive_status']=='รับแล้ว') continue;
 
-$assets[$code] = [
-'asset_id'=>$code,
-'no_pc'=>$code,
-'type'=>$row['user_type_equipment'],
-'details'=>$row['user_equipment_details'],
-'new_no'=>$row['user_new_no'],
-'spec'=>$row['user_spec'],
-'ram'=>$row['user_ram'],
-'ssd'=>$row['user_ssd'],
-'gpu'=>$row['user_gpu']
-];
+    $info = getAssetInfo($conn,$pc);
 
-}
-}
-
-/* ================= Monitor ================= */
-$monitors = [
-$row['user_monitor1'],
-$row['user_monitor2']
-];
-
-foreach($monitors as $m){
-
-$m = trim($m);
-
-if(!empty($m) && !isSentAndReceived($conn,$m,$site)){
-
-$assets[$m] = [
-'asset_id'=>$m,
-'no_pc'=>$m,
-'type'=>'Monitor'
-];
-
-}
+    $assets[$pc] = [
+        'no_pc'=>$pc,
+        'type'=>$info['type_equipment'] ?? 'PC',
+        'spec'=>$info['spec'] ?? '',
+        'ram'=>$info['ram'] ?? '',
+        'ssd'=>$info['ssd'] ?? '',
+        'gpu'=>$info['gpu'] ?? '',
+        'transfer'=>$t
+    ];
 }
 
-/* ================= UPS ================= */
+// ===== MONITOR =====
+foreach([$row['user_monitor1'],$row['user_monitor2']] as $m){
+
+    $m = trim($m);
+    if(empty($m)) continue;
+
+    $t = getTransferStatus($conn,$m,$site);
+    if($t && $t['receive_status']=='รับแล้ว') continue;
+
+    $info = getAssetInfo($conn,$m);
+
+    $assets[$m] = [
+        'no_pc'=>$m,
+        'type'=>'Monitor',
+        'spec'=>$info['spec'] ?? '',
+        'ram'=>$info['ram'] ?? '',
+        'ssd'=>$info['ssd'] ?? '',
+        'gpu'=>$info['gpu'] ?? '',
+        'transfer'=>$t
+    ];
+}
+
+// ===== UPS =====
 if(!empty($row['user_ups'])){
 
-$ups = trim($row['user_ups']);
+    $ups = trim($row['user_ups']);
 
-if(!isSentAndReceived($conn,$ups,$site)){
+    $t = getTransferStatus($conn,$ups,$site);
+    if($t && $t['receive_status']=='รับแล้ว') continue;
 
-$assets[$ups] = [
-'asset_id'=>$ups,
-'no_pc'=>$ups,
-'type'=>'UPS'
-];
+    $info = getAssetInfo($conn,$ups);
 
+    $assets[$ups] = [
+        'no_pc'=>$ups,
+        'type'=>'UPS',
+        'spec'=>$info['spec'] ?? '',
+        'ram'=>$info['ram'] ?? '',
+        'ssd'=>$info['ssd'] ?? '',
+        'gpu'=>$info['gpu'] ?? '',
+        'transfer'=>$t
+    ];
 }
-}
 
-/* ================= MULTI ================= */
+// ===== MULTI =====
 $multiFields = [
-'user_cctv' => 'CCTV',
-'user_nvr' => 'NVR',
-'user_printer' => 'Printer'
+'user_cctv','user_nvr','user_projector','user_printer',
+'user_audio_set','user_plotter','user_Accessories_IT',
+'user_Drone','user_Optical_Fiber','user_Server'
 ];
 
-foreach($multiFields as $field => $type){
+foreach($multiFields as $field){
 
-if(empty($row[$field])) continue;
+    if(empty($row[$field])) continue;
 
-$list = explode(',', $row[$field]);
+    $list = explode(',', $row[$field]);
 
-foreach($list as $item){
+    foreach($list as $item){
 
-$item = trim($item);
+        $item = trim($item);
+        if(empty($item)) continue;
 
-if(empty($item)) continue;
+        $t = getTransferStatus($conn,$item,$site);
+        if($t && $t['receive_status']=='รับแล้ว') continue;
 
-if(isSentAndReceived($conn,$item,$site)) continue;
+        $info = getAssetInfo($conn,$item);
 
-$assets[$item] = [
-'asset_id'=>$item,
-'no_pc'=>$item,
-'type'=>$type
-];
-
+        $assets[$item] = [
+            'no_pc'=>$item,
+            'type'=>$info['type_equipment'] ?? 'OTHER',
+            'spec'=>$info['spec'] ?? '',
+            'ram'=>$info['ram'] ?? '',
+            'ssd'=>$info['ssd'] ?? '',
+            'gpu'=>$info['gpu'] ?? '',
+            'transfer'=>$t
+        ];
+    }
 }
 }
 
-/* ================= SINGLE ================= */
-$singleFields = [
-'user_projector' => 'Projector',
-'user_audio_set' => 'Audio Set',
-'user_plotter' => 'Plotter',
-'user_Accessories_IT' => 'Accessories IT',
-'user_Drone' => 'Drone',
-'user_Optical_Fiber' => 'Optical Fiber',
-'user_Server' => 'Server'
-];
-
-foreach($singleFields as $field => $type){
-
-if(!empty($row[$field])){
-
-$val = trim($row[$field]);
-
-if(!isSentAndReceived($conn,$val,$site)){
-
-$assets[$val] = [
-'asset_id'=>$val,
-'no_pc'=>$val,
-'type'=>$type
-];
-
-}
-}
-}
-}
-
-
-/* ===============================
-SUBMIT
-=============================== */
+/* =====================================================
+🔥 SUBMIT
+===================================================== */
 if(isset($_POST['submit'])){
 
-$type = $_POST['transfer_type'] ?? '';
-$to   = $_POST['to_site'] ?? '';
 $items = $_POST['asset_ids'] ?? [];
+$type  = $_POST['transfer_type'];
+$to    = $_POST['to_site'];
 
 if(empty($items)){
-echo "<script>alert('กรุณาเลือกอุปกรณ์');</script>";
-}
-else{
+    echo "<script>alert('กรุณาเลือกอุปกรณ์');</script>";
+}else{
 
-/* ===============================
-🔥 ตรวจรายการซ้ำก่อน
-=============================== */
-$duplicates = [];
+$conn->beginTransaction();
+
+try{
+
+$sent_transfer = $conn->query("
+SELECT ISNULL(MAX(sent_transfer),0)+1 FROM IT_AssetTransfer_Headers
+")->fetchColumn();
+
+$stmt = $conn->prepare("
+INSERT INTO IT_AssetTransfer_Headers
+(sent_transfer,transfer_type,from_site,to_site,created_by,admin_status,no_pc,type)
+VALUES (?,?,?,?,?,?,?,?)
+");
 
 foreach($items as $aid){
 
-    if(isset($assets[$aid])){
+if(!isset($assets[$aid])) continue;
 
-        $a = $assets[$aid];
+$t = getTransferStatus($conn,$aid,$site);
 
-        $dup = checkDuplicate($conn,$a['no_pc'],$site);
+// ❌ กันโอนซ้ำ
+if($t && $t['receive_status']!='รับแล้ว'){
 
-        if($dup){
-            $duplicates[] = [
-                'code' => $a['no_pc'],
-                'to' => $dup['to_site'],
-                'round' => $dup['sent_transfer']
-            ];
-        }
-    }
-}
-
-/* ===============================
-🔥 ถ้ามีซ้ำ → แจ้งเตือน + หยุด
-=============================== */
-if(!empty($duplicates)){
-
-    $msg = "❌ พบรายการซ้ำ\n\n";
-
-    foreach($duplicates as $d){
-        $msg .= "รหัส: ".$d['code']."\n";
-        $msg .= "เคยส่งไป: ".$d['to']."\n";
-        $msg .= "รอบที่: ".$d['round']."\n\n";
-    }
-
-    echo "<script>alert(".json_encode($msg).");</script>";
+    echo "<script>alert('รายการ $aid ถูกโอนไปที่ ".$t['to_site']." แล้ว (ยังไม่รับ)');</script>";
+    $conn->rollBack();
     return;
 }
 
-
-/* ===============================
-นับรอบส่งโอนย้าย
-=============================== */
-$stmtRound = $conn->prepare("
-SELECT ISNULL(MAX(sent_transfer),0)+1 AS round_transfer
-FROM IT_AssetTransfer_Headers
-");
-$stmtRound->execute();
-$r = $stmtRound->fetch(PDO::FETCH_ASSOC);
-
-$sent_transfer = $r['round_transfer'];
-
-
-/* ===============================
-INSERT (เหมือนเดิม)
-=============================== */
-$stmt = $conn->prepare("
-INSERT INTO IT_AssetTransfer_Headers
-(sent_transfer,transfer_type,from_site,to_site,created_by,admin_status,new_no,no_pc,details,spec,ssd,ram,gpu,type)
-VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-");
-
-foreach($items as $aid){
-
-if(isset($assets[$aid])){
-
-$a = $assets[$aid];
-
-/* 🔥 กันซ้ำอีกชั้น */
-$dup = checkDuplicate($conn,$a['no_pc'],$site);
-if($dup) continue;
-
+// INSERT
 $stmt->execute([
-$sent_transfer,
-$type,
-$site,
-$to,
-$user,
-'รออนุมัติ',
-$a['new_no'] ?? '',
-$a['no_pc'] ?? '',
-$a['details'] ?? '',
-$a['spec'] ?? '',
-$a['ssd'] ?? '',
-$a['ram'] ?? '',
-$a['gpu'] ?? '',
-$a['type'] ?? ''
+$sent_transfer,$type,$site,$to,$user,'รออนุมัติ',$aid,$assets[$aid]['type']
 ]);
 
-}
-}
-$itemsText = implode(",", $items);
+// 🔥 REMOVE USER
+$conn->prepare("UPDATE IT_user_information SET user_no_pc=NULL WHERE user_project=? AND user_no_pc=?")->execute([$site,$aid]);
+$conn->prepare("UPDATE IT_user_information SET user_monitor1=NULL WHERE user_project=? AND user_monitor1=?")->execute([$site,$aid]);
+$conn->prepare("UPDATE IT_user_information SET user_monitor2=NULL WHERE user_project=? AND user_monitor2=?")->execute([$site,$aid]);
+$conn->prepare("UPDATE IT_user_information SET user_ups=NULL WHERE user_project=? AND user_ups=?")->execute([$site,$aid]);
 
-header("Location: transfer_create.php?success=1&to=".$to."&items=".$itemsText);
+foreach($multiFields as $field){
+
+$stmtM = $conn->prepare("
+SELECT id,$field FROM IT_user_information
+WHERE user_project=? AND $field LIKE ?
+");
+$stmtM->execute([$site,"%$aid%"]);
+
+foreach($stmtM->fetchAll(PDO::FETCH_ASSOC) as $r){
+
+$list = explode(',', $r[$field]);
+$list = array_filter(array_map('trim',$list));
+$list = array_diff($list, [$aid]);
+
+$conn->prepare("UPDATE IT_user_information SET $field=? WHERE id=?")
+->execute([implode(',',$list),$r['id']]);
+}
+}
+
+}
+
+$conn->commit();
+
+header("Location: transfer_create.php?success=1");
 exit;
 
-}
+}catch(Exception $e){
+
+$conn->rollBack();
+die($e->getMessage());
 
 }
 
+}
+}
 include 'partials/header.php';
 include 'partials/sidebar.php';
 ?>
 
+<!-- ================= UI ================= -->
 <div class="container mt-4">
 <div class="card shadow">
 
 <div class="card-header bg-success text-white">
-🚚 สร้างรายการโอนย้าย / ส่งมอบ / ส่งคืน
+🚚 สร้างรายการโอนย้าย
 </div>
 
 <div class="card-body">
 
 <form method="post">
 
-<div class="row">
+<div class="row mb-3">
 
 <div class="col-md-4">
 <label>ประเภท</label>
@@ -345,49 +285,40 @@ include 'partials/sidebar.php';
 <label>ไปยัง</label>
 <select name="to_site" class="form-control">
 <?php foreach($projects as $p): ?>
-<option><?= $p['project_name'] ?></option>
+<option><?= $p ?></option>
 <?php endforeach; ?>
 </select>
 </div>
 
 </div>
 
-<hr>
-
-<table class="table table-bordered">
+<table class="table table-bordered text-center">
 
 <tr>
-<th>ลำดับ</th>
+<th>#</th>
 <th>เลือก</th>
 <th>ประเภท</th>
 <th>รหัส</th>
 <th>Spec</th>
 </tr>
 
-<?php $i=1; foreach($assets as $a): 
-
-$spec = trim(($a['spec'] ?? '').($a['ram'] ?? '').($a['ssd'] ?? '').($a['gpu'] ?? ''));
-
-if($spec==''){
-$spec='<span class="badge bg-success">ยังไม่ได้บันทึกข้อมูล</span>';
-}else{
-$spec=$a['spec']." | ".$a['ram']." | ".$a['ssd']." | ".$a['gpu'];
-}
-?>
+<?php $i=1; foreach($assets as $a): ?>
 
 <tr>
-
 <td><?= $i++ ?></td>
 
 <td>
-<input type="checkbox" name="asset_ids[]" value="<?= $a['asset_id'] ?>">
+<input type="checkbox" name="asset_ids[]" value="<?= $a['no_pc'] ?>">
 </td>
 
 <td><?= $a['type'] ?></td>
-
 <td><?= $a['no_pc'] ?></td>
 
-<td><?= $spec ?></td>
+<td>
+<?= !empty($a['spec']) 
+? $a['spec']." | ".$a['ram']." | ".$a['ssd']." | ".$a['gpu']
+: '<span class="badge bg-success">ยังไม่มีข้อมูล</span>' ?>
+</td>
 
 </tr>
 
@@ -395,46 +326,11 @@ $spec=$a['spec']." | ".$a['ram']." | ".$a['ssd']." | ".$a['gpu'];
 
 </table>
 
-<div class="text-end mt-2">
-<strong>
-จำนวนอุปกรณ์ที่เลือก :
-<span id="countSelect">0</span>
-</strong>
-</div>
-
-<button class="btn btn-success mt-3" name="submit">
+<button class="btn btn-success" name="submit">
 📨 ส่งรายการ
 </button>
 
 </form>
-
-</div>
-</div>
-</div>
-
-<!-- SUCCESS MODAL -->
-<div class="modal fade" id="successModal" tabindex="-1">
-<div class="modal-dialog modal-dialog-centered">
-<div class="modal-content border-0 shadow">
-
-<div class="modal-header text-white"
-style="background: linear-gradient(135deg,#198754,#20c997);">
-
-<h5 class="modal-title">✅ ส่งรายการสำเร็จ</h5>
-</div>
-
-<div class="modal-body text-center">
-
-<h5 class="mb-3 text-success">🎉 ส่งรายการเรียบร้อยแล้ว</h5>
-
-<div id="successDetail" style="font-size:14px;"></div>
-
-</div>
-
-<div class="modal-footer justify-content-center">
-<button class="btn btn-success px-4" data-bs-dismiss="modal">ปิด</button>
-</div>
-
 </div>
 </div>
 </div>
