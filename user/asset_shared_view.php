@@ -25,10 +25,12 @@ $transfered = array_map('trim',$stmtT->fetchAll(PDO::FETCH_COLUMN));
 // 🔴 ไม่มีผู้ใช้ (ดูจาก asset จริง)
 $stmt1 = $conn->prepare("
 SELECT COUNT(*) 
-FROM IT_assets
-WHERE project = ?
-AND (use_it IS NULL OR use_it = '')
+FROM IT_AssetTransfer_Headers
+WHERE to_site = ?
+AND receive_status = 'รับแล้ว'
+AND (user_status IS NULL OR user_status = '')
 ");
+
 $stmt1->execute([$site]);
 $count_no_user = $stmt1->fetchColumn();
 

@@ -29,9 +29,10 @@ $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 🔥 ดึงข้อมูล asset จาก table หลัก
 ===================================================== */
 function getAssetInfo($conn,$no_pc){
+
     $stmt = $conn->prepare("
-    SELECT no_pc,spec,ram,ssd,gpu,type_equipment
-    FROM IT_assets
+    SELECT type_equipment,spec,ram,ssd,gpu
+    FROM IT_Assets
     WHERE no_pc = ?
     ");
     $stmt->execute([$no_pc]);
@@ -68,7 +69,6 @@ if(!empty($row['user_no_pc'])){
     $pc = trim($row['user_no_pc']);
     $t = getTransferStatus($conn,$pc,$site);
 
-    // ❌ ถ้ารับแล้ว → ไม่แสดง
     if($t && $t['receive_status']=='รับแล้ว') continue;
 
     $info = getAssetInfo($conn,$pc);
@@ -168,6 +168,9 @@ foreach($multiFields as $field){
 ===================================================== */
 if(isset($_POST['submit'])){
 
+// 🔥 reset token หลังใช้
+unset($_SESSION['form_token']);
+
 $items = $_POST['asset_ids'] ?? [];
 $type  = $_POST['transfer_type'];
 $to    = $_POST['to_site'];
@@ -209,11 +212,6 @@ $stmt->execute([
 $sent_transfer,$type,$site,$to,$user,'รออนุมัติ',$aid,$assets[$aid]['type']
 ]);
 
-// 🔥 REMOVE USER
-$conn->prepare("UPDATE IT_user_information SET user_no_pc=NULL WHERE user_project=? AND user_no_pc=?")->execute([$site,$aid]);
-$conn->prepare("UPDATE IT_user_information SET user_monitor1=NULL WHERE user_project=? AND user_monitor1=?")->execute([$site,$aid]);
-$conn->prepare("UPDATE IT_user_information SET user_monitor2=NULL WHERE user_project=? AND user_monitor2=?")->execute([$site,$aid]);
-$conn->prepare("UPDATE IT_user_information SET user_ups=NULL WHERE user_project=? AND user_ups=?")->execute([$site,$aid]);
 
 foreach($multiFields as $field){
 
@@ -238,7 +236,9 @@ $conn->prepare("UPDATE IT_user_information SET $field=? WHERE id=?")
 
 $conn->commit();
 
-header("Location: transfer_create.php?success=1");
+$items_str = implode(",", $items);
+
+header("Location: transfer_create.php?success=1&to=".$to."&items=".$items_str);
 exit;
 
 }catch(Exception $e){
@@ -292,6 +292,7 @@ include 'partials/sidebar.php';
 
 </div>
 
+
 <table class="table table-bordered text-center">
 
 <tr>
@@ -336,6 +337,29 @@ include 'partials/sidebar.php';
 </div>
 
 <?php include 'partials/footer.php'; ?>
+
+<!-- ✅ SUCCESS MODAL (ธีมเขียว) -->
+<div class="modal fade" id="successModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-success">
+
+      <div class="modal-header bg-success text-white">
+        <h5 class="modal-title">✅ ส่งอุปกรณ์สำเร็จ</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+
+      <div class="modal-body">
+        <div id="successDetail" style="font-size:15px;"></div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-success" data-bs-dismiss="modal">ตกลง</button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
 
 <script>
 const checkboxes=document.querySelectorAll("input[name='asset_ids[]']");

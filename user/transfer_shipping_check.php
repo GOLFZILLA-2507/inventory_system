@@ -97,20 +97,24 @@ echo '<span class="badge bg-danger">ไม่พบ</span>';
 
 }
 else{
-
 echo '<span class="badge bg-warning text-dark">ยังไม่ตรวจรับ</span>';
-
 }
-
 ?>
-
 </td>
-
 </tr>
 
 <?php endforeach; ?>
 
 </table>
+
+<!-- 🔥 ปุ่มย้อนกลับ (อยู่ล่าง) -->
+<div class="mt-3 text-start">
+    <button onclick="history.back()" class="btn btn-secondary">
+        ⬅️ ย้อนกลับ
+    </button>
+</div>
+
+</div>
 
 </div>
 </div>

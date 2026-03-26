@@ -5,6 +5,90 @@ require_once '../config/checklogin.php';
 /* ================= SAVE HISTORY ================= */
 function saveHistory($conn,$emp,$site,$action,$admin){
 
+    // 🔥 1. ดึง history ล่าสุดของ user
+    $stmt = $conn->prepare("
+    SELECT TOP 1 *
+    FROM IT_user_history
+    WHERE user_employee=? AND user_project=?
+    ORDER BY history_id DESC
+    ");
+    $stmt->execute([$emp,$site]);
+    $last = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    // 🔥 2. ดึงข้อมูลปัจจุบันจาก table หลัก
+    $stmt2 = $conn->prepare("
+    SELECT TOP 1 *
+    FROM IT_user_information
+    WHERE user_employee=? AND user_project=?
+    ORDER BY id DESC
+    ");
+    $stmt2->execute([$emp,$site]);
+    $current = $stmt2->fetch(PDO::FETCH_ASSOC);
+
+    // ❌ ไม่มีข้อมูลหลัก → ไม่ต้องทำอะไร
+    if(!$current) return;
+
+    // =========================================
+    // 🔥 3. เช็ค FULL (ครบชุดหรือยัง)
+    // =========================================
+    $isFull = false;
+
+    if($last){
+        $isFull = (
+            !empty($last['user_no_pc']) &&
+            !empty($last['user_monitor1']) &&
+            !empty($last['user_monitor2']) &&
+            !empty($last['user_ups'])
+        );
+    }
+
+    // =========================================
+    // 🔴 CASE 1: ไม่มี history → INSERT ใหม่
+    // =========================================
+    if(!$last){
+
+        insertHistory($conn,$current,$action,$admin);
+        return;
+    }
+
+    // =========================================
+    // 🔴 CASE 2: FULL แล้ว → INSERT ใหม่
+    // =========================================
+    if($isFull){
+
+        insertHistory($conn,$current,$action,$admin);
+        return;
+    }
+
+    // =========================================
+    // 🔴 CASE 3: ยังไม่ FULL → UPDATE แถวเดิม
+    // =========================================
+    $stmt = $conn->prepare("
+    UPDATE IT_user_history SET
+        asset_id = ?,
+        user_no_pc = ?,
+        user_monitor1 = ?,
+        user_monitor2 = ?,
+        user_ups = ?,
+        user_update = GETDATE(),
+        action_type = ?,
+        created_by = ?
+    WHERE history_id = ?
+    ");
+
+    $stmt->execute([
+        $current['asset_id'] ?? null,
+        $current['user_no_pc'],
+        $current['user_monitor1'],
+        $current['user_monitor2'],
+        $current['user_ups'],
+        $action,
+        $admin,
+        $last['history_id']
+    ]);
+}
+function insertHistory($conn,$data,$action,$admin){
+
     $stmt = $conn->prepare("
     INSERT INTO IT_user_history (
         asset_id,
@@ -14,57 +98,32 @@ function saveHistory($conn,$emp,$site,$action,$admin){
         user_monitor1,
         user_monitor2,
         user_ups,
-        user_cctv,
-        user_nvr,
-        user_projector,
-        user_printer,
-        user_Service_life,
-        user_update,
-        user_audio_set,
-        user_plotter,
-        user_Accessories_IT,
-        user_Drone,
-        user_Optical_Fiber,
-        user_Server,
         user_record,
         original_id,
         action_type,
         created_at,
         created_by
     )
-    SELECT 
-        asset_id,
-        user_employee,
-        user_project,
-        user_no_pc,
-        user_monitor1,
-        user_monitor2,
-        user_ups,
-        user_cctv,
-        user_nvr,
-        user_projector,
-        user_printer,
-        user_Service_life,
-        user_update,
-        user_audio_set,
-        user_plotter,
-        user_Accessories_IT,
-        user_Drone,
-        user_Optical_Fiber,
-        user_Server,
-        user_record,
-        id,
-        ?,
-        GETDATE(),
-        ?
-    FROM IT_user_information
-    WHERE user_employee=? AND user_project=?
+    VALUES (
+        ?,?,?,?,?,?,?,?,?,
+        ?,GETDATE(),?
+    )
     ");
 
-    $stmt->execute([$action,$admin,$emp,$site]);
-    
+    $stmt->execute([
+        $data['asset_id'] ?? null,
+        $data['user_employee'],
+        $data['user_project'],
+        $data['user_no_pc'],
+        $data['user_monitor1'],
+        $data['user_monitor2'],
+        $data['user_ups'],
+        $data['user_record'] ?? null,
+        $data['id'], // จาก IT_user_information
+        $action,
+        $admin
+    ]);
 }
-
 $site = $_SESSION['site'];
 $user = $_SESSION['fullname'];
 
@@ -78,7 +137,7 @@ ORDER BY fullname
 $employees->execute([$site]);
 $employees = $employees->fetchAll(PDO::FETCH_ASSOC);
 
-/* ================= โหลดอุปกรณ์ ================= */
+/* ================= โหลดอุปกรณ์ หลักจาก IT_assets================= */
 function getAssets($conn,$types){
 
     $in  = str_repeat('?,', count($types) - 1) . '?';
@@ -157,21 +216,18 @@ if(!$userRow){
 
     $stmt = $conn->prepare("
     INSERT INTO IT_user_information(
-        user_employee,user_position,user_project,
-        user_no_pc,user_new_no,user_equipment_details,
+        user_employee,user_project,
+        user_no_pc,
         user_monitor1,user_monitor2, user_ups,
         user_update,user_record
     )
-    VALUES(?,?,?,?,?,?,?,?, ?,GETDATE(),?)
+    VALUES(?,?,?,?,?, ?,GETDATE(),?)
     ");
 
     $stmt->execute([
         $emp,
-        $pos,
         $site,
         $pc,
-        $new_no,
-        $equipment_details,
         $m1,
         $m2,
         $ups,
@@ -194,12 +250,10 @@ if(!empty($pc)){
 
     $conn->prepare("
     UPDATE IT_user_information
-    SET user_no_pc=?, user_new_no=?, user_equipment_details=?
+    SET user_no_pc=?
     WHERE id=?
-    ")->execute([$pc,$new_no,$equipment_details,$userRow['id']]);
+    ")->execute([$pc,$userRow['id']]);
 }
-// 🔥 เก็บ history หลัง update
-saveHistory($conn,$emp,$site,'after_update',$user);
 
 /* ================= MONITOR ================= */
 
@@ -274,6 +328,8 @@ if(!empty($ups)){
     WHERE no_pc=?
     ")->execute([$emp,$site,$ups]);
 }
+// 🔥 เก็บ history หลัง update
+saveHistory($conn,$emp,$site,'after_update',$user);
 
 /* ================= UPDATE asset ================= */
 if(!empty($asset_id)){

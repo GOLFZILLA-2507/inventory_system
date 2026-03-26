@@ -22,9 +22,16 @@ $h = $stmt->fetch(PDO::FETCH_ASSOC);
 โหลดรายการอุปกรณ์ทั้งหมดในรอบนั้น
 ===================================================== */
 $stmt = $conn->prepare("
-SELECT no_pc,spec,ram,ssd,gpu
-FROM IT_AssetTransfer_Headers
-WHERE sent_transfer = ?
+SELECT 
+    h.no_pc,
+    a.type_equipment,
+    a.spec,
+    a.ram,
+    a.ssd,
+    a.gpu
+FROM IT_AssetTransfer_Headers h
+LEFT JOIN IT_assets a ON h.no_pc = a.no_pc
+WHERE h.sent_transfer = ?
 ");
 
 $stmt->execute([$round]);
@@ -137,6 +144,7 @@ margin:10px;
 <tr>
 <th width="60">ลำดับ</th>
 <th width="200">รหัสอุปกรณ์</th>
+<th width="120">ประเภท</th>
 <th>Spec</th>
 </tr>
 
@@ -164,6 +172,8 @@ $spec = empty($specParts)
 <td style="text-align:center"><?= $i++ ?></td>
 
 <td><?= $it['no_pc'] ?></td>
+
+<td><?= $it['type_equipment'] ?? 'ไม่ทราบประเภท' ?></td>
 
 <td><?= $spec ?></td>
 

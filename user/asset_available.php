@@ -40,7 +40,7 @@ LEFT JOIN IT_assets a ON a.no_pc = t.no_pc
 
 WHERE t.to_site = ?
 AND t.receive_status = 'รับแล้ว'
-AND t.status IS NULL
+AND t.user_status IS NULL
 
 ORDER BY t.arrived_date DESC
 ");

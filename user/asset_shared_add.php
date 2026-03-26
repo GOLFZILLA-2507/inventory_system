@@ -2,6 +2,128 @@
 require_once '../config/connect.php';
 require_once '../config/checklogin.php';
 
+/* =====================================================
+   FUNCTION: บันทึก HISTORY (SHARED)
+   👉 logic: snapshot ทุกครั้งหลัง update
+===================================================== */
+function saveSharedHistory($conn,$site,$admin){
+
+    // 🔥 1. เช็คว่ามี history ของ project นี้แล้วหรือยัง
+    $check = $conn->prepare("
+    SELECT TOP 1 *
+    FROM IT_user_history
+    WHERE user_project=? AND history_type='SHARED'
+    ORDER BY history_id DESC
+    ");
+    $check->execute([$site]);
+    $last = $check->fetch(PDO::FETCH_ASSOC);
+
+    // 🔥 2. ดึงข้อมูลปัจจุบัน
+    $current = $conn->prepare("
+    SELECT *
+    FROM IT_user_information
+    WHERE user_project=? AND user_type_equipment='SHARED'
+    ");
+    $current->execute([$site]);
+    $data = $current->fetch(PDO::FETCH_ASSOC);
+
+    if(!$data) return;
+
+    // =========================================
+    // 🔴 ถ้ายังไม่มี history → INSERT ครั้งแรก
+    // =========================================
+    if(!$last){
+        
+        $stmt = $conn->prepare("
+        INSERT INTO IT_user_history (
+            user_employee,
+            user_project,
+            user_cctv,
+            user_nvr,
+            user_projector,
+            user_printer,
+            user_audio_set,
+            user_plotter,
+            user_Accessories_IT,
+            user_Drone,
+            user_Optical_Fiber,
+            user_Server,
+            user_record,
+            original_id,
+            action_type,
+            history_type,
+            created_at,
+            created_by
+        )
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,GETDATE(),?)
+        ");
+        // 👉 snapshot ข้อมูลปัจจุบัน (ของเดิมคุณ) ลง history
+        $stmt->execute([
+            $site,
+            $site,
+            $data['user_cctv'],
+            $data['user_nvr'],
+            $data['user_projector'],
+            $data['user_printer'],
+            $data['user_audio_set'],
+            $data['user_plotter'],
+            $data['user_Accessories_IT'],
+            $data['user_Drone'],
+            $data['user_Optical_Fiber'],
+            $data['user_Server'],
+            $data['user_record'],
+            $data['id'],
+            'shared_update',
+            'SHARED',
+            $admin
+        ]);
+
+        return;
+    }
+
+    // =========================================
+    // 🔵 มีอยู่แล้ว → UPDATE แถวเดิม
+    // =========================================
+    $stmt = $conn->prepare("
+    UPDATE IT_user_history SET
+        user_cctv=?,
+        user_nvr=?,
+        user_projector=?,
+        user_printer=?,
+        user_audio_set=?,
+        user_plotter=?,
+        user_Accessories_IT=?,
+        user_Drone=?,
+        user_Optical_Fiber=?,
+        user_Server=?,
+        user_record=?,
+        action_type=?,
+        created_by=?,
+        user_update=GETDATE()
+    WHERE history_id=?
+    ");
+
+    $stmt->execute([
+        $data['user_cctv'],
+        $data['user_nvr'],
+        $data['user_projector'],
+        $data['user_printer'],
+        $data['user_audio_set'],
+        $data['user_plotter'],
+        $data['user_Accessories_IT'],
+        $data['user_Drone'],
+        $data['user_Optical_Fiber'],
+        $data['user_Server'],
+        $data['user_record'],
+        'shared_update',
+        $admin,
+        $last['history_id']
+    ]);
+}
+
+/* =====================================================
+   SESSION (ต้องมาก่อนใช้)
+===================================================== */
 $site = $_SESSION['site'];
 $user = $_SESSION['fullname'];
 
@@ -21,29 +143,23 @@ function getByType($conn,$type){
 }
 
 /* =====================================================
-   FUNCTION รวมค่า (หัวใจของระบบนี้)
-   👉 เอาค่าเก่า + ค่าใหม่ → ต่อท้าย + กันซ้ำ
+   FUNCTION รวมค่า (ของเดิมคุณ)
 ===================================================== */
 function mergeValue($old, $newArr){
 
-    // แปลงค่าเก่าเป็น array
     $oldArr = !empty($old) ? explode(',', $old) : [];
 
-    // trim กันช่องว่าง
     $oldArr = array_map('trim', $oldArr);
     $newArr = array_map('trim', $newArr);
 
-    // รวม + กันซ้ำ
     $final = array_unique(array_merge($oldArr, $newArr));
-
-    // ลบค่าว่าง
     $final = array_filter($final);
 
     return !empty($final) ? implode(',', $final) : null;
 }
 
 /* =====================================================
-   FUNCTION สำหรับ multi select
+   FUNCTION multi select (ของเดิมคุณ)
 ===================================================== */
 function setMulti($conn, $ids, $site, $old){
 
@@ -53,7 +169,6 @@ function setMulti($conn, $ids, $site, $old){
 
         if(!$id) continue;
 
-        // หา no_pc
         $q=$conn->prepare("SELECT no_pc FROM IT_assets WHERE asset_id=?");
         $q->execute([$id]);
         $row=$q->fetch(PDO::FETCH_ASSOC);
@@ -62,7 +177,6 @@ function setMulti($conn, $ids, $site, $old){
 
             $new[] = $row['no_pc'];
 
-            // update asset → mark ว่าใช้งานแล้ว
             $conn->prepare("
             UPDATE IT_assets
             SET project=?, use_it=?, [update]=GETDATE()
@@ -71,7 +185,6 @@ function setMulti($conn, $ids, $site, $old){
         }
     }
 
-    // 🔥 รวมค่า
     return mergeValue($old, $new);
 }
 
@@ -94,7 +207,7 @@ $server     = getByType($conn,'Server');
 ===================================================== */
 if(isset($_POST['submit'])){
 
-    // รับค่าเป็น array
+    // รับค่า array (ของเดิมคุณ)
     $cctvArr        = (array)($_POST['cctv'] ?? []);
     $nvrArr         = (array)($_POST['nvr'] ?? []);
     $projectorArr   = (array)($_POST['projector'] ?? []);
@@ -119,7 +232,7 @@ if(isset($_POST['submit'])){
     }
 
     /* ================= โหลดข้อมูลเดิม ================= */
-  $stmt=$conn->prepare("
+    $stmt=$conn->prepare("
     SELECT *
     FROM IT_user_information
     WHERE user_project=? 
@@ -136,13 +249,13 @@ if(isset($_POST['submit'])){
         (user_project, user_type_equipment, user_record, user_update)
         VALUES (?, 'SHARED', ?, GETDATE())
         ")->execute([$site, $user]);
-        // reload
+
         $stmt->execute([$site]);
         $current=$stmt->fetch(PDO::FETCH_ASSOC);
     }
 
     /* =====================================================
-       CCTV
+       CCTV (ของเดิมคุณครบ)
     ===================================================== */
     $new_cctv = [];
 
@@ -168,7 +281,7 @@ if(isset($_POST['submit'])){
     $cctv_str = mergeValue($current['user_cctv'], $new_cctv);
 
     /* =====================================================
-       NVR
+       NVR (ของเดิมคุณครบ)
     ===================================================== */
     $new_nvr = [];
 
@@ -194,7 +307,7 @@ if(isset($_POST['submit'])){
     $nvr_str = mergeValue($current['user_nvr'], $new_nvr);
 
     /* =====================================================
-       MULTI TYPE
+       MULTI TYPE (ของเดิมคุณครบ)
     ===================================================== */
     $projector_pc   = setMulti($conn,$projectorArr,$site,$current['user_projector']);
     $printer_pc     = setMulti($conn,$printerArr,$site,$current['user_printer']);
@@ -206,7 +319,7 @@ if(isset($_POST['submit'])){
     $server_pc      = setMulti($conn,$serverArr,$site,$current['user_Server']);
 
     /* =====================================================
-       UPDATE (อัปเดตแถวเดียวเท่านั้น)
+       UPDATE (ของเดิมคุณ)
     ===================================================== */
     $stmt=$conn->prepare("
     UPDATE IT_user_information SET
@@ -227,7 +340,7 @@ if(isset($_POST['submit'])){
     ");
 
     $stmt->execute([
-        $site, // user_employee ใช้ชื่อโครงการแทน
+        $site,
         $cctv_str,
         $nvr_str,
         $projector_pc,
@@ -242,6 +355,14 @@ if(isset($_POST['submit'])){
         $site
     ]);
 
+    /* =====================================================
+       SAVE HISTORY (เพิ่มอย่างเดียว ไม่แตะ logic เดิม)
+    ===================================================== */
+    saveSharedHistory($conn,$site,$user);
+
+    /* =====================================================
+       REDIRECT
+    ===================================================== */
     header("Location: asset_shared_view.php?success=1");
     exit;
 }
