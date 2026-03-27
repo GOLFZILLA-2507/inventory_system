@@ -33,5 +33,39 @@ logic นับอุปกรณ์ไม่มีผู้ใช้
 - โอนมาถึง site เราแล้ว (to_site)
 - รับของเรียบร้อยแล้ว
 - ยังไม่มีคนรับไปใช้ (user_status ว่าง)
-
 = คือของกองอยู่ = ไม่มีผู้ใช้
+
+*******************************************
+asset_available.php
+  ↓
+กดปุ่ม
+  ↓
+modal confirm
+  ↓
+modal success
+submit POST กลับไฟล์เดิม
+  ↓
+PHP ทำงาน:
+  ✔ update IT_user_information
+  ✔ update IT_user_history (ต่อค่า)
+  ✔ update IT_AssetTransfer_Headers
+
+
+*******************************************
+user/asset_assign_user.php
+  1. เช็ค user เดิมในโครงการ
+   ✔ มี → update แถวเดิม
+   ✔ ไม่มี → insert ใหม่
+
+2. แยกตามประเภทอุปกรณ์
+   ✔ PC → มีแล้ว = ห้ามเพิ่ม
+   ✔ Monitor → ลง monitor1 → monitor2 → เต็ม = ไม่เพิ่ม
+   ✔ UPS → มีแล้ว = ห้ามเพิ่ม
+
+3. Flow
+   กด → confirm modal → submit → success modal
+
+4. update 3 ตาราง
+   ✔ IT_user_information
+   ✔ IT_user_history (user_employee = คนที่เลือก)
+   ✔ IT_AssetTransfer_Headers
