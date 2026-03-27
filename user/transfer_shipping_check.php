@@ -2,6 +2,25 @@
 require_once '../config/connect.php';
 require_once '../config/checklogin.php';
 
+/* =====================================================
+🔥 เมื่อกดยกเลิก
+===================================================== */
+if(isset($_POST['cancel_id'])){
+
+    $id = $_POST['cancel_id'];
+
+    $stmt = $conn->prepare("
+    UPDATE IT_AssetTransfer_Headers
+    SET receive_status = 'ยกเลิก'
+    WHERE transfer_id = ?
+    ");
+    $stmt->execute([$id]);
+
+    header("Location: transfer_shipping_check.php?round=".$round);
+    exit;
+}
+
+
 $round = $_GET['round'] ?? 0;
 
 /* โหลดรายการอุปกรณ์ในรอบนั้น */
@@ -47,10 +66,12 @@ include 'partials/sidebar.php';
 
 <tr>
 <th width="60">#</th>
+<th>ส่งไปยัง</th>
 <th>รหัสอุปกรณ์</th>
 <th>ประเภท</th>
 <th>Spec</th>
 <th>สถานะปลายทาง</th>
+<th>จัดการ</t่h>
 </tr>
 
 <?php $i=1; foreach($data as $d): ?>
@@ -58,11 +79,9 @@ include 'partials/sidebar.php';
 <tr>
 
 <td><?= $i++ ?></td>
-
+<td><?= $d['to_site'] ?></td>
 <td><?= $d['no_pc'] ?></td>
-
 <td><?= $d['type_equipment'] ?></td>
-
 <td>
 
 <?php
@@ -101,6 +120,26 @@ echo '<span class="badge bg-warning text-dark">ยังไม่ตรวจร
 }
 ?>
 </td>
+
+<td class="text-center">
+
+<?php if($d['receive_status'] != 'ยกเลิก'): ?>
+
+<form method="post" onsubmit="return confirm('ยืนยันยกเลิกรายการนี้?');">
+    <input type="hidden" name="cancel_id" value="<?= $d['transfer_id'] ?>">
+    <button class="btn btn-danger btn-sm">
+        ❌ ยกเลิก
+    </button>
+</form>
+
+<?php else: ?>
+
+<span class="badge bg-secondary">ยกเลิกแล้ว</span>
+
+<?php endif; ?>
+
+</td>
+
 </tr>
 
 <?php endforeach; ?>

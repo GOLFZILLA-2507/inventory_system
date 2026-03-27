@@ -236,8 +236,6 @@ if(!$userRow){
 // 🔥 save history หลัง insert
 saveHistory($conn,$emp,$site,'assign',$user);
 }else{
-// 🔥 เก็บ history ก่อน update (สำคัญมาก)
-saveHistory($conn,$emp,$site,'before_update',$user);
 /* ================= UPDATE ================= */
 
 // 🔴 PC (ห้ามทับ)
@@ -328,8 +326,6 @@ if(!empty($ups)){
     WHERE no_pc=?
     ")->execute([$emp,$site,$ups]);
 }
-// 🔥 เก็บ history หลัง update
-saveHistory($conn,$emp,$site,'after_update',$user);
 
 /* ================= UPDATE asset ================= */
 if(!empty($asset_id)){
