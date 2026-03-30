@@ -3,124 +3,85 @@ require_once '../config/connect.php';
 require_once '../config/checklogin.php';
 
 /* =====================================================
-   FUNCTION: บันทึก HISTORY (SHARED)
-   👉 logic: snapshot ทุกครั้งหลัง update
+🔥 NEW: บันทึก history แบบ 1 อุปกรณ์ = 1 row (SHARED)
 ===================================================== */
 function saveSharedHistory($conn,$site,$admin){
 
-    // 🔥 1. เช็คว่ามี history ของ project นี้แล้วหรือยัง
-    $check = $conn->prepare("
-    SELECT TOP 1 *
-    FROM IT_user_history
-    WHERE user_project=? AND history_type='SHARED'
-    ORDER BY history_id DESC
-    ");
-    $check->execute([$site]);
-    $last = $check->fetch(PDO::FETCH_ASSOC);
-
-    // 🔥 2. ดึงข้อมูลปัจจุบัน
-    $current = $conn->prepare("
+    // 🔥 ดึงข้อมูล SHARED ปัจจุบัน
+    $stmt = $conn->prepare("
     SELECT *
     FROM IT_user_information
     WHERE user_project=? AND user_type_equipment='SHARED'
     ");
-    $current->execute([$site]);
-    $data = $current->fetch(PDO::FETCH_ASSOC);
+    $stmt->execute([$site]);
+    $data = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if(!$data) return;
 
-    // =========================================
-    // 🔴 ถ้ายังไม่มี history → INSERT ครั้งแรก
-    // =========================================
-    if(!$last){
-        
-        $stmt = $conn->prepare("
-        INSERT INTO IT_user_history (
-            user_employee,
-            user_project,
-            user_cctv,
-            user_nvr,
-            user_projector,
-            user_printer,
-            user_audio_set,
-            user_plotter,
-            user_Accessories_IT,
-            user_Drone,
-            user_Optical_Fiber,
-            user_Server,
-            user_record,
-            original_id,
-            action_type,
-            history_type,
-            created_at,
-            created_by
-        )
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,GETDATE(),?)
-        ");
-        // 👉 snapshot ข้อมูลปัจจุบัน (ของเดิมคุณ) ลง history
-        $stmt->execute([
-            $site,
-            $site,
-            $data['user_cctv'],
-            $data['user_nvr'],
-            $data['user_projector'],
-            $data['user_printer'],
-            $data['user_audio_set'],
-            $data['user_plotter'],
-            $data['user_Accessories_IT'],
-            $data['user_Drone'],
-            $data['user_Optical_Fiber'],
-            $data['user_Server'],
-            $data['user_record'],
-            $data['id'],
-            'shared_update',
-            'SHARED',
-            $admin
-        ]);
+    // 🔥 map field → type
+    $fields = [
+        'user_cctv' => 'CCTV',
+        'user_nvr' => 'NVR',
+        'user_projector' => 'Projector',
+        'user_printer' => 'Printer',
+        'user_audio_set' => 'audio_set',
+        'user_plotter' => 'Plotter',
+        'user_Accessories_IT' => 'Accessories_IT',
+        'user_Drone' => 'Drone',
+        'user_Optical_Fiber' => 'Optical_Fiber',
+        'user_Server' => 'Server'
+    ];
 
-        return;
+    foreach($fields as $field => $type){
+
+        if(empty($data[$field])) continue;
+
+        // 🔥 แตก comma → array
+        $items = explode(',', $data[$field]);
+
+        foreach($items as $no_pc){
+
+            $no_pc = trim($no_pc);
+            if(empty($no_pc)) continue;
+
+            // 🔥 กัน insert ซ้ำ (สำคัญ)
+            $check = $conn->prepare("
+            SELECT COUNT(*) FROM IT_user_history
+            WHERE user_project=? 
+            AND user_no_pc=? 
+            AND history_type='SHARED'
+            AND end_date IS NULL
+            ");
+            $check->execute([$site,$no_pc]);
+
+            if($check->fetchColumn() > 0){
+                continue; // มีอยู่แล้ว ไม่ต้อง insert
+            }
+
+            // 🔥 insert 1 row ต่อ 1 อุปกรณ์
+            $conn->prepare("
+            INSERT INTO IT_user_history (
+                user_employee,
+                user_project,
+                user_no_pc,
+                history_type,
+                start_date,
+                created_at,
+                created_by,
+                action_type
+            )
+            VALUES (?,?,?, ?,GETDATE(),GETDATE(),?,?)
+            ")->execute([
+                $site,
+                $site,
+                $no_pc,
+                $type,
+                $admin,
+                'shared_assign'
+            ]);
+        }
     }
-
-    // =========================================
-    // 🔵 มีอยู่แล้ว → UPDATE แถวเดิม
-    // =========================================
-    $stmt = $conn->prepare("
-    UPDATE IT_user_history SET
-        user_cctv=?,
-        user_nvr=?,
-        user_projector=?,
-        user_printer=?,
-        user_audio_set=?,
-        user_plotter=?,
-        user_Accessories_IT=?,
-        user_Drone=?,
-        user_Optical_Fiber=?,
-        user_Server=?,
-        user_record=?,
-        action_type=?,
-        created_by=?,
-        user_update=GETDATE()
-    WHERE history_id=?
-    ");
-
-    $stmt->execute([
-        $data['user_cctv'],
-        $data['user_nvr'],
-        $data['user_projector'],
-        $data['user_printer'],
-        $data['user_audio_set'],
-        $data['user_plotter'],
-        $data['user_Accessories_IT'],
-        $data['user_Drone'],
-        $data['user_Optical_Fiber'],
-        $data['user_Server'],
-        $data['user_record'],
-        'shared_update',
-        $admin,
-        $last['history_id']
-    ]);
 }
-
 /* =====================================================
    SESSION (ต้องมาก่อนใช้)
 ===================================================== */

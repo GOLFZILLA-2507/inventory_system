@@ -26,6 +26,19 @@
                 </li>
 
                 <li class="nav-item">
+                    <a class="nav-link" href="admin_add_project.php">➕ เพิ่มโครงการ</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="admin_assign_userproject.php">🔄 กำหนดโครงการ</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="admin_rental_price_manage.php">💰 จัดการราคาเช่า</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="admin_rental_dashboard.php">📊 แดชบอร์ดเช่า</a>
+                </li>
+
+                <li class="nav-item">
                     <a class="nav-link" href="import_assets.php">
                         💻 Import อุปกรณ์
                     </a>
@@ -44,4 +57,4 @@
     </div>
 </nav>
 
-<div class="container mt-4">
+<div class="container-fluid mt-4">

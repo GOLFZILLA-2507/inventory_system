@@ -83,42 +83,52 @@ if(isset($_POST['transfer_id'])){
     WHERE id=?
     ")->execute([$new,$site,$user,$row['id']]);
 
-    /* ===============================
-    🔥 HISTORY → ต่อค่า (ไม่เพิ่ม row)
-    =============================== */
-    $stmtH = $conn->prepare("
-    SELECT * FROM IT_user_history
-    WHERE user_project=? AND history_type='SHARED'
-    ");
-    $stmtH->execute([$site]);
-    $h = $stmtH->fetch(PDO::FETCH_ASSOC);
+   /* ===============================
+🔥 HISTORY NEW (1 อุปกรณ์ = 1 row)
+=============================== */
 
-    if(!$h){
+// 🔥 เช็คซ้ำจาก IT_user_information (ตาม requirement)
+$checkDup = $conn->prepare("
+SELECT COUNT(*) FROM IT_user_information
+WHERE 
+    user_cctv = ?
+    OR user_nvr = ?
+    OR user_projector = ?
+    OR user_printer = ?
+    OR user_audio_set = ?
+    OR user_plotter = ?
+    OR user_Accessories_IT = ?
+    OR user_Drone = ?
+    OR user_Optical_Fiber = ?
+    OR user_Server = ?
+");
+$checkDup->execute([
+    $no_pc,$no_pc,$no_pc,$no_pc,$no_pc,
+    $no_pc,$no_pc,$no_pc,$no_pc,$no_pc
+]);
 
-        $conn->prepare("
-        INSERT INTO IT_user_history
-        (user_employee,user_project,$field,history_type,created_at,created_by)
-        VALUES (?,?,?,GETDATE(),?)
-        ")->execute([$site,$site,$no_pc,'SHARED',$user]);
+    // 🔥 insert history ใหม่ (1 row ต่อ 1 อุปกรณ์)
+    $conn->prepare("
+    INSERT INTO IT_user_history (
+        user_employee,
+        user_project,
+        user_no_pc,
+        history_type,
+        start_date,
+        created_at,
+        created_by,
+        action_type
+    )
+    VALUES (?,?,?, ?,GETDATE(),GETDATE(),?,?)
+    ")->execute([
+        $site,
+        $site,
+        $no_pc,
+        $type,        // 🔥 ใช้ type จริงจาก assets
+        $user,
+        'shared_assign'
+    ]);
 
-    }else{
-
-        $oldH = $h[$field] ?? '';
-        $arrH = !empty($oldH) ? explode(',', $oldH) : [];
-        $arrH = array_map('trim',$arrH);
-
-        if(!in_array($no_pc,$arrH)){
-            $arrH[] = $no_pc;
-        }
-
-        $newH = implode(',', array_filter($arrH));
-
-        $conn->prepare("
-        UPDATE IT_user_history
-        SET $field=?, user_employee=?, created_at=GETDATE(), created_by=?
-        WHERE history_id=?
-        ")->execute([$newH,$site,$user,$h['history_id']]);
-    }
 
     /* ===============================
     🔥 update transfer

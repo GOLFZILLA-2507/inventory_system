@@ -2,6 +2,26 @@
 require_once '../config/connect.php';
 require_once '../config/checklogin.php';
 
+/* =========================================
+🔥 ตรวจอุปกรณ์ซ้ำทั้งระบบ
+========================================= */
+function checkDuplicateDevice($conn,$no_pc){
+
+    $stmt = $conn->prepare("
+    SELECT TOP 1 user_employee, user_project
+    FROM IT_user_information
+    WHERE 
+        user_no_pc = ?
+        OR user_monitor1 = ?
+        OR user_monitor2 = ?
+        OR user_ups = ?
+    ");
+
+    $stmt->execute([$no_pc,$no_pc,$no_pc,$no_pc]);
+
+    return $stmt->fetch(PDO::FETCH_ASSOC);
+}
+
 $site = $_SESSION['site'];
 $loginUser = $_SESSION['fullname'];
 
@@ -72,7 +92,6 @@ if(isset($_POST['save'])){
         die("ไม่พบผู้ใช้");
     }
 
-    $user_position = $userData['position'];
     $user_project  = $userData['site'];
 
     /* =====================================================
@@ -84,6 +103,18 @@ if(isset($_POST['save'])){
     ");
     $stmt->execute([$user_employee,$user_project]);
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+
+        /* =====================================================
+    🔥 CHECK DUPLICATE (กันซ้ำทั้งระบบ)
+    ===================================================== */
+
+    $dup = checkDuplicateDevice($conn,$no_pc);
+
+    if($dup){
+        echo "<script>alert('❌ อุปกรณ์นี้ถูกใช้งานแล้ว\n\nรหัส: $no_pc\nผู้ใช้: {$dup['user_employee']}\nโครงการ: {$dup['user_project']}');history.back();</script>";
+        exit;
+    }
 
     /* =====================================================
     🔥 TYPE LOGIC
@@ -115,11 +146,10 @@ if(isset($_POST['save'])){
 
             $conn->prepare("
             INSERT INTO IT_user_information
-            (user_employee,user_position,user_project,user_monitor1,user_record,user_update)
-            VALUES (?,?,?,?,?,GETDATE())
+            (user_employee,user_project,user_monitor1,user_record,user_update)
+            VALUES (?,?,?,?,GETDATE())
             ")->execute([
                 $user_employee,
-                $user_position,
                 $user_project,
                 $no_pc,
                 $loginUser
@@ -141,11 +171,10 @@ if(isset($_POST['save'])){
         }else{
             $conn->prepare("
             INSERT INTO IT_user_information
-            (user_employee,user_position,user_project,user_ups,user_record,user_update)
-            VALUES (?,?,?,?,?,GETDATE())
+            (user_employee,user_project,user_ups,user_record,user_update)
+            VALUES (?,?,?,?,GETDATE())
             ")->execute([
                 $user_employee,
-                $user_position,
                 $user_project,
                 $no_pc,
                 $loginUser
@@ -167,11 +196,10 @@ if(isset($_POST['save'])){
         }else{
             $conn->prepare("
             INSERT INTO IT_user_information
-            (user_employee,user_position,user_project,user_no_pc,user_record,user_update)
-            VALUES (?,?,?,?,?,GETDATE())
+            (user_employee,user_project,user_no_pc,user_record,user_update)
+            VALUES (?,?,?,?,GETDATE())
             ")->execute([
                 $user_employee,
-                $user_position,
                 $user_project,
                 $no_pc,
                 $loginUser
@@ -179,19 +207,30 @@ if(isset($_POST['save'])){
         }
     }
 
-    /* =====================================================
-    🔥 HISTORY
-    ===================================================== */
-    $conn->prepare("
-    INSERT INTO IT_user_history
-    (user_employee,user_project,user_no_pc,created_at,created_by)
-    VALUES (?,?,?,GETDATE(),?)
-    ")->execute([
-        $user_employee,
-        $user_project,
-        $no_pc,
-        $loginUser
-    ]);
+        /* =====================================================
+        🔥 HISTORY NEW (1 อุปกรณ์ = 1 row + เก็บ type)
+        ===================================================== */
+
+        $conn->prepare("
+        INSERT INTO IT_user_history (
+            user_employee,
+            user_project,
+            user_no_pc,
+            history_type,
+            start_date,
+            created_at,
+            created_by,
+            action_type
+        )
+        VALUES (?,?,?, ?,GETDATE(),GETDATE(),?,?)
+        ")->execute([
+            $user_employee,
+            $user_project,
+            $no_pc,
+            $type,          // 🔥 ประเภทอุปกรณ์ (สำคัญมาก)
+            $loginUser,
+            'assign_user'   // 🔥 action ไว้แยกเหตุการณ์
+        ]);
 
     /* =====================================================
     🔥 UPDATE TRANSFER
@@ -202,7 +241,7 @@ if(isset($_POST['save'])){
     WHERE transfer_id=?
     ")->execute([$user_employee,$transfer_id]);
 
-    header("Location: asset_assign_user.php?success=1&pc=".$no_pc);
+    header("Location: asset_available.php");
     exit;
 }
 ?>

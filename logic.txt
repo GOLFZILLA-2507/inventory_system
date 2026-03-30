@@ -69,3 +69,26 @@ user/asset_assign_user.php
    ✔ IT_user_information
    ✔ IT_user_history (user_employee = คนที่เลือก)
    ✔ IT_AssetTransfer_Headers
+***********************************************
+ที่ผมคิดไว้คือ 
+logic โดยผมจะเพิ่มฟิล Rental_price และกำหนดค่าเช่าให้ของแต่ละอุปกรณ์ เช่น ประเภท PC สเปค... ราคาค่าเช่าต่อวัน 20 บาท ,CCTV ราคาเช่าต่อวัน 5 บาท และถ้าเมื่อ user โอนย้ายอุปกรณ์ไป แต่ปลายทางยังไม่ได้กดรับของ = ยังไม่เริ่มคิดค่าเช่า ถ้านำมาใช้ค่อยเริ่มคิด และ ต้องการสร้างหน้าสำหรับ admin เพื่อดูรายละเอียดค่าเช่าของทุกๆ โครงการ โดยให้แอดมินมีสิทธิ์มีปุ่มกด ปิด โครงการ หมายความว่า ถ้าสถานะปิดโครงการ = รวมราคาค่าเช่าทั้งหมดมาแดง 
+ผมต้องเพิ่มเก็บข้อมูลสำหรับคิดค่าเช่าด้วยไหมครับ
+ฐาน SELECT TOP (1000) [asset_id]
+      ,[new_no]
+      ,[no_pc]
+      ,[Equipment_details]
+      ,[type_equipment]
+      ,[project]
+      ,[spec]
+      ,[ssd]
+      ,[ram]
+      ,[gpu]
+      ,[yfm_1]
+      ,[How_long]
+      ,[Service_life]
+      ,[update]
+      ,[yfm_2]
+      ,[How_long2]
+      ,[Machine_value]
+      ,[use_it]
+  FROM [VsathapatV2].[dbo].[IT_assets]

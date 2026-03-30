@@ -1,164 +1,115 @@
-user/asset_assign.php
-ปัญหา
-1.ตอนนี้เมื่อ user เลือกอุปกรณ์ให้พนักงาน ตอนนี้มันไปอัพเดท แถวเดียวกับ อุปกรณ์ใช้ร่วม ผมไม่ต้องการแบบนี้
-ความต้องการ
-1.เมื่อ user  เลือกอุปกรณ์ให้พนักงาน ให้หาว่า พนักงานที่ถูกเลือก มี เครื่องหลัก จอ1,จอ2,ups ใช้หรือยัง ถ้าพนักงานคนนั้นยังไม่มีอุปกรณ์อะไรเลย ให้สร้างแถวใหม่เป็นของคนนั้น กรณีมีแต่จอ แล้ว user เลือกจอให้อีก ให้เช็คว่า จอ1,จอ2 ของคนที่เลือกมีใช้งานหรือยัง ถ้ามีทั้ง2จอ = อัพเดทไม่ได้ หรือถ้ามี จอใดจอหนึ่ง ให้อัพเดทไปที่ จอที่ว่าง เป็นการเช็คไปในตัว [user_no_pc] ก็เหมือนกัน ถ้ามีแล้ว =  ไม่อัพเดท  ถ้าไม่มี = อัพเดทได้ 
-2.แก้ตรงไหนถึงไหนบ้าง บอกให้เห็นภาพ
-3.คอมเม้นไทย 
-4.บอกสิ่งทีได้หลังแก้
-
-admin/asset_all.php
-ความต้องการ
-ปัญหา
-1. เมื่อ admin เลือกเพิ่มผู้ใช้งาน ให้กับโครงการต่างๆ (ตัวอย่างก่อสร้างโครงสร้างเหล็ก(เจดีย์)วัดธรรมยาน) ตอนนี้ admin ลองเลือก PC ให้พนักงาน แล้วมันเด้งเตือน ❌ คนนี้มีอุปกรณ์ในโครงการนี้อยู่แล้ว เพราะตอนนี้มันเช็คจากโครงการเลยเพิ่มผู้ใช้งานไม่ได้ ความต้องการผมคือ เมื่อ admin เพิ่มผู้ใช้งานให้กับ user ตามโครงการให้เช็คว่า พนักงานคนนั้นในโครงการนั้น มีเครื่องหลักใช้หรือยัง เช็ค ,[user_employee]
-      ,[user_project],[user_no_pc]
-      ,[user_monitor1]
-      ,[user_monitor2] ถ้ากรณีคนนี้มีจอ1 อยู่แล้ว ให้อัพเดทไปที่จอ 2 เลย 
-1.ถ้า [user_employee] = ไม่มีค่าว่าง ให้ไม่แสดงคำว่า นำมาใช้งาน/เพิ่มผู้ใช้งาน ไม่แสดง เพราะผมจะปรับระบบใหม่ คือ เมื่อ user เลือกอุปกรณ์หลักให้กับพนักงาน เช่น นาย  A โครงการ X  ใช้อุปกรร์ user_no_pc ... และ user  ลืมเลือกจอ แล้วถ้าเลือกจอให้กับ  นาย A จะไม่ไปสร้างแถวใหม่ ให้อัพเดทลงแถว จอ ของนาย A เลย กรณีเป็นประเทศอุปกรณ์ใช้ร่วม เมื่อ user เลือกอุปกรณ์ใช้ร่วม ผมจะให้สร้าง 1 แถว สำรหับอุปกรณ์ร่วมของโครงการนั้นเลย โดยนำมาเรียงต่อเป็นแถวเดียวกัน 
-ตัวอย่าง
-admin/asset_all.php
-ความต้องการ
-1.โครงการทั้งหมด ไม่แสดง ก่อนหน้านี้ยังแสดงอยู่เลย ถ้าโครงการไหนยังไม่มีอุปกรณ์อะไรเลย ให้แสดงว่า ไม่พบอุปกรณ์ในโครงการนี้
-2.หลังจาก admin เพิ่มผู้ใช้งาน แล้วไม่เกิดอะไรขึ้นเลย ไม่มีการ insert ผมต้องการให้ insert ไป ฐาน IT_user_information 
-ตัวอย่าง เช่น admin เลือก เครื่องนี้... นาย A และลืมเลือกจอ และหลังจากเลือกจอให้นาย A ก็ให้อัพเดทไปอยู่แถวเดียวกัน กันความซับซ้อนของฐานข้อมูล
-3.มีการเช็คอุปกรณ์ซ้ำภายในโครงการของตัวเองด้วย ถ้าเจอซ้ำ ให้ แสดง ว่าใครใช้อยู่ และใช้อยู่ที่ไหน 
-4.คอมเม้นภาษาไทย
-5.ต้องแก้ตรงไหนถึงตรงไหนบอกให้ชัดเจน จะได้แก้ได้ถูกต้อง
-6.บอกสิ่งที่ผมจะได้หลังจากแก้
-7.ถ้ากรณีเป็นประเภทอุปกรณ์ใช้ร่วม ให้เปลี่ยนจาก เพิ่มผู้ใช้งาน เป็น นำมาใช้งาน หลังจากกด ให้อัพเดทไปที่โครงการของโครงการที่เลือกเลย ถ้าไม่มีให้ขึ้นแถวใหม่ เป็นแถวเดียวเลย 
-/* user/asset_shared_view.php
-ปัญหา
-1.หลังจาก user ปลายทางกดติ๊กและยืนยันรับอุปกรณ์ ผลปรากฎว่า อุปกรณ์ใช้ร่วมของโครงการต้นทางไม่แสดงเลย 
-ความต้องการ
-1.แก้ให้โครงการต้นทาง เห็นแสดงอุปกรณ์ที่ยังไม่ถูกโอนย้ายไปแล้ว 
-ให้เช็คจาก
-SELECT TOP (1000) [transfer_id]
-      ,[transfer_type] = โอนย้าย/ส่งคืน
-      ,[to_site] = โครงการปลายทาง
-      ,[receive_status] สำคัญ = รับแล้ว เท่านั้น
-      ,[no_pc] รหัสอุปกรณ์ ที่ถูกโอนย้าย ไม่ต้องแสดง
-  FROM [VsathapatV2].[dbo].[IT_AssetTransfer_Headers]*/
-
 ***เช็ค DEBUG***
 echo "<pre>";
 print_r($_POST);
 echo "</pre>";
 exit;
 ***
-
+******************************************************************
 ***คำสั่งเคลียร์ฐานข้อมูล เริ่ม int นับ 1 ใหม่***
 DELETE FROM ชื่อฐานข้อมูล;
-DELETE FROM ชื่อฐานข้อมูล;
 DBCC CHECKIDENT ('ชื่อฐานข้อมูล', RESEED, 0);
-DBCC CHECKIDENT ('ชื่อฐานข้อมูล', RESEED, 0);
-*********************************
+******************************************************************
 
-****************
 UPDATE IT_assets
 SET project = N'สำนักงานใหญ่';
-****************
+******************************************************************
 
 ีรีฐานรับ int 1ใหม่
 TRUNCATE TABLE IT_user_information;
-***********************************
+******************************************************************
 
-DELETE FROM IT_AssetTransfer_Headers;
-DBCC CHECKIDENT ('IT_AssetTransfer_Headers', RESEED, 0);
-***************************************
-
-DELETE FROM IT_AssetTransfer_Items;
-DELETE FROM IT_AssetTransfer_Headers;
-DBCC CHECKIDENT ('IT_AssetTransfer_Items', RESEED, 0);
-DBCC CHECKIDENT ('IT_AssetTransfer_Headers', RESEED, 0);
-
->>>>>>> 9946070 (...)
-****เช็ค FK***
-SELECT 
-    fk.name AS FK_Name,
-    tp.name AS ParentTable,
-    tr.name AS ReferencedTable
-FROM sys.foreign_keys fk
-JOIN sys.tables tp ON fk.parent_object_id = tp.object_id
-JOIN sys.tables tr ON fk.referenced_object_id = tr.object_id
-WHERE tr.name = 'IT_AssetTransfer_Headers';
-********************************************
-
-เช็คว่ามีพนักงานอยู่โครงการไหนบ้าง
-SELECT 
-    site,
-    COUNT(*) AS total_employee
-FROM Employee
-GROUP BY site
-ORDER BY site;
-
-1. ดูค่าทั้งหมดในคอลัมน์ Equipment_details
-SELECT DISTINCT Equipment_details
+เช็คประเภทอุปกรณ์ทั้งหมด
+SELECT DISTINCT type_equipment
 FROM IT_assets
-ORDER BY Equipment_details
+ORDER BY type_equipment;
+******************************************************************
 
-🔍 2. ดูจำนวนแต่ละประเภท (อันนี้สำคัญมาก)
-
-SELECT 
-    Equipment_details,
-    COUNT(*) AS total
+เช็คจำนวนอุปกรณ์ทั้งหมด
+SELECT type_equipment, COUNT(*) AS total
 FROM IT_assets
-GROUP BY Equipment_details
-ORDER BY total DESC
+GROUP BY type_equipment
+ORDER BY total DESC;
+******************************************************************
+
+เซ็ตค่าราคาอุปกรณ์
+-- PC = 20 บาท
+UPDATE IT_assets
+SET rental_price = 5
+WHERE type_equipment = 'Accessories_IT';
+
+-- CCTV = 5 บาท
+UPDATE IT_assets
+SET rental_price = 10
+WHERE type_equipment = 'All_In_One';
 
 
-🔍 3. ดูข้อมูลจริงแบบละเอียด
+-- audio_set = 5 บาท
+UPDATE IT_assets
+SET rental_price = 5
+WHERE type_equipment = 'audio_set';
 
-SELECT TOP 100
-    asset_id,
-    no_pc,
-    type_equipment,
-    Equipment_details,
-    project
-FROM IT_assets
-ORDER BY asset_id DESC
+-- CCTV = 5 บาท
+UPDATE IT_assets
+SET rental_price = 5
+WHERE type_equipment = 'CCTV';
 
-4. เช็คค่า NULL / ค่าว่าง (ตัวปัญหาหลัก)
+-- Drone = 5 บาท
+UPDATE IT_assets
+SET rental_price = 5
+WHERE type_equipment = 'Drone';
 
-SELECT COUNT(*) AS null_count
-FROM IT_assets
-WHERE Equipment_details IS NULL
+-- Monitor = 5 บาท
+UPDATE IT_assets
+SET rental_price = 5
+WHERE type_equipment = 'Monitor';
 
-SELECT *
-FROM IT_assets
-WHERE Equipment_details IS NULL
+-- Notebook = 20 บาท
+UPDATE IT_assets
+SET rental_price = 20
+WHERE type_equipment = 'Notebook';
 
-5. เช็คค่าที่เป็นช่องว่าง (space)
 
-SELECT *
-FROM IT_assets
-WHERE Equipment_details = ''
+-- NVR = 5 บาท
+UPDATE IT_assets
+SET rental_price = 5
+WHERE type_equipment = 'NVR';
 
-🔍 6. เช็คว่ามีข้อมูลซ้ำไหม
-SELECT Equipment_details, COUNT(*)
-FROM IT_assets
-GROUP BY Equipment_details
-HAVING COUNT(*) > 1
 
-🔍 7. ถ้าจะใช้ filter ใน PHP (ตัวนี้สำคัญ)
+-- Optical_Fiber = 5 บาท
+UPDATE IT_assets
+SET rental_price = 5
+WHERE type_equipment = 'Optical_Fiber';
 
-SELECT *
-FROM IT_assets
-WHERE Equipment_details = 'Accessories_IT'
+-- PC = 5 บาท
+UPDATE IT_assets
+SET rental_price = 20
+WHERE type_equipment = 'PC';
 
-“หรือมีหลายค่า”
 
-SELECT *
-FROM IT_assets
-WHERE Equipment_details IN ('Keyboard','Mouse','LAN')
+-- Plotter = 20 บาท
+UPDATE IT_assets
+SET rental_price = 20
+WHERE type_equipment = 'Plotter';
 
-*******************
-ต่อจากนี้ผมจะทำระบบ โอนย้าย / ส่งมอบ / รับคืน หน้า user 
-1.ส่งมอบ ความหมายคือ จะใช้คำนี้ได้ก็ต่อเมื่อ เป็นสำนักงานใหญ่ ส่งมอบ อุปกรณ์ไปยัง โครงการ A เท่านั้น โดยให้สถานะว่า "สำนักงานใหญ่ ส่งมอบอุปกรณ์.... ไปยังโครงการ A และเมื่ออุปกรณ์ถึงโครงการ A" แล้วหลังจากเจ้าหน้าที่เช็ครายการเรียบร้อยว่ามีครบไหม หรือ ถ้าไม่ครบ ให้ หมายเหตุไว้ว่า อุปกรณ์ รหัส... "ไม่พบอุปกรณ์"
-หรือถ้าอุปกรณ์ครบทุกรายการ โครงการ A จึงกด รับของทั้งหมด และให้ สถานะเป็น "โครงการ A ได้รับอุปกรณ์ครบถ้วน" ตามด้วยวันที่ การส่งมอบ และ โครงการ C รับของครบถ้วนทั้งหมด วันที่
 
-2.การ โอนย้าย ความหมายคือ จะใช้คำนี้ได้ก็ต่อเมื่อ โครงการ B โอนย้าย อุปกรณ์ไปยัง โครงการ C เท่านั้น  โดยให้สถานะว่า "โครงการ B โอนย้ายอุปกรณ์ .... ไปยังโครงการ C และเมื่ออุปกรณ์ถึงโครงการ C" แล้วหลังจากเจ้าหน้าที่เช็ครายการเรียบร้อยว่ามีครบไหม หรือ ถ้าไม่ครบ ให้ หมายเหตุไว้ว่า อุปกรณ์ รหัส... "ไม่พบอุปกรณ์"
-หรือถ้าอุปกรณ์ครบทุกรายการ โครงการ C จึงกด รับของทั้งหมด และให้ สถานะเป็น "โครงการ C ได้รับอุปกรณ์ครบถ้วน" ตามด้วยวันที่ การโอนย้ายจากโครงการ B และ โครงการ C รับของครบถ้วนทั้งหมด วันที่
+-- Printer = 10 บาท
+UPDATE IT_assets
+SET rental_price = 10
+WHERE type_equipment = 'Printer';
 
-3.ส่งคืน ความหมายคือ จะใช้คำนี้ได้ก็ต่อเมื่อ โครงการ B ส่งคืน อุปกรณ์ไปยัง สำนักงานใหญ่ เท่านั้น โดยให้สถานะว่า "โครงการ B ส่งคืนอุปกรณ์ .... ไปยังสำนักงานใหญ่ และเมื่ออุปกรณ์ถึงสำนักงานใหญ่ แล้วหลังจากเจ้าหน้าที่เช็ครายการเรียบร้อยว่ามีครบไหม หรือ ถ้าไม่ครบ ให้ หมายเหตุไว้ว่า อุปกรณ์ รหัส... "ไม่พบอุปกรณ์"
-หรือถ้าอุปกรณ์ครบทุกรายการ สำนักงานใหญ่ จึงกด รับของทั้งหมด และให้ สถานะเป็น "สำนักงานใหญ่ ได้รับอุปกรณ์ครบถ้วน" ตามด้วยวันที่ การส่งคืนจากโครงการ B และ สำนักงานใหญ่ รับของครบถ้วนทั้งหมด วันที่
 
+-- Projector = 5 บาท
+UPDATE IT_assets
+SET rental_price = 5
+WHERE type_equipment = 'Projector';
+
+
+-- Server = 50 บาท
+UPDATE IT_assets
+SET rental_price = 50
+WHERE type_equipment = 'Server';
+
+-- UPS = 5 บาท
+UPDATE IT_assets
+SET rental_price = 5
+WHERE type_equipment = 'UPS';
