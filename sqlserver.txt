@@ -1,3 +1,9 @@
+เซ็ตวันที่
+UPDATE IT_user_history
+SET start_date = '2026-01-02 10:00:00'
+WHERE history_id = 31;
+
+******************************************************************
 ***เช็ค DEBUG***
 echo "<pre>";
 print_r($_POST);

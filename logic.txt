@@ -1,6 +1,184 @@
 1.แก้ตรงไหนบอกผมให้ชัดเจน ผมไม่อยากมาคาดอะไรที่ไม่ชัดเจน ใส่มั่ว แล้วต้องแก้ไปเรื่อยๆ เพราะไม่รู้ตำแหน่งที่ใส่ชัดเจน
 2.หลังแก้ผมจะได้อะไรบ้าง
 
+admin/admin_rental_dashboard.php
+แก้ไขแบบฟลูโค้ด พร้อมเม้นไทย และ บอกสิ่งที่จะได้หลังแก้ไข
+ความต้องการ
+1.dashboard รายได้ ให้มีปุ่มราย ดูรายละเอียด เมื่อคลิกดูให้แสดง popup เด้งว่า ค่าเช่ามาจากอุปกรณ์อะไรบ้าง 
+2.dashboard จำนวนประเภทอุปกรณ์ อุปกรณ์ ให้มีปุ่มรายละเอียด เมื่อคลิกให้แสดง popup เด้งว่า ว่า มีอุปรกรณ์อะไรบ้าง  และ มีอย่างละอุปกรณ์
+3.เมื่อมีรายการอุปกรณ์อุปกรณ์ที่ SELECT TOP (1000) [ticket_id]
+      ,[status] = รอรับเครื่อง ให้หยุดคิดเงินอุปกรณ์นั้น จนกว่าเครื่องนั้นจะ  ,[status] = เสร็จแล้ว จึงนำมาคิดเงินต่อ 
+  FROM [VsathapatV2].[dbo].[IT_RepairTickets]
+4.เพิ่มช่อง สถานะการซ่่อม ถ้าค่า =  NULL ไม่ต้องแสดงอะไร
+5.เพิ่มการเคลื่อนไหวนิดๆหน่อยๆ เมื่อเมาส์คลิกโดนอะไร 
+6.ปรับสีตารางให้ออกสี ฟ้าๆ อมขาวๆ 
+7.จำนวนอุปกรณ์ยังเก็บไว้  โดนัทยังเก็บไว้ กราฟยังเก็บไว้
+8.เพิ่ม  filter สถานะการซ่อมเข้ามา
+9.เอาหน้าตา  ui เดิม ห้ามเปลี่ยน แต่แก้ไขตามผมที่ผมบอกเฉยๆ 
+10.ตอนนี้ฐาน   FROM [VsathapatV2].[dbo].[IT_RepairTickets] มี project มาแล้วจะสังเกตุดีๆครับ 
+11.ปรับให้ dashboard แต่ละอันเท่ากันหน่อยครับ
+12.ปรับ modal ดูรายละเอียด ให้ธีมสีน้ำเงินอมฟ้า และขยายให้มันกว้างขึ้น dashboard รายได้รวม ดูยากเกินไป แบ่งประเภทให้ชัดเจนกว่านี้
+ตัวอย่างฐาน
+ticket_id	asset_id	user_id	user_name	problem	priority	status	created_at	updated_at	closed_at	assigned_to	solution	cost	img1	user_no_pc	user_equipment_details	user_type_equipment	project
+1	NULL	1159055	นางสาววรรณา  ตาปู่	สีภาพเพี้ยน	Normal	เสร็จแล้ว	2026-03-31 10:04:16.610	2026-03-31 10:05:39.627	2026-03-31 10:05:39.627			0.00	1774926260_0_frame.png	MO-0023	Monitor	Monitor	ก่อสร้างโครงสร้างเหล็ก(เจดีย์)วัดธรรมยาน
+
+(ต่อ....)
+<?php
+require_once '../config/connect.php';
+require_once '../config/checklogin.php';
+
+/* ================= FILTER ================= */
+$search  = $_GET['search'] ?? ''; /* ค้นหาได้ทั้งชื่อเครื่องและประเภท */
+$project = $_GET['project'] ?? ''; /* 🔥 เพิ่ม filter โครงการ */
+$status  = $_GET['status'] ?? ''; /* open = กำลังเช่า (end_date ยังไม่ระบุ) / close = หมดสัญญา (end_date มีค่า) */
+$grade   = $_GET['grade'] ?? ''; /* 🔥 เพิ่ม filter เกรด */
+$repair_status = $_GET['repair_status'] ?? ''; /* 🔥 เพิ่ม filter สถานะซ่อม */
+
+/* ================= SQL ================= */
+$sql = "
+SELECT 
+    h.user_project, 
+    h.user_employee, 
+    h.user_no_pc, 
+
+    ISNULL(NULLIF(LTRIM(RTRIM(a.type_equipment)),''),'อื่นๆ') AS type_equipment, 
+    LTRIM(RTRIM(r.status)) AS repair_status, 
+
+    DATEDIFF(DAY, h.start_date, ISNULL(h.end_date, GETDATE())) AS total_days, 
+    a.rental_price,
+    a.How_long2,
+    a.device_grade,
+
+    CASE 
+    WHEN r.status LIKE '%รอรับเรื่อง%' 
+        THEN DATEDIFF(DAY, h.start_date, r.created_at)
+
+    WHEN r.status LIKE '%เสร็จแล้ว%' 
+        THEN 
+            DATEDIFF(DAY, h.start_date, r.created_at) 
+            +
+            DATEDIFF(DAY, r.closed_at, GETDATE())
+
+    ELSE 
+        DATEDIFF(DAY, h.start_date, ISNULL(h.end_date, GETDATE()))
+END * a.rental_price AS total_price
+
+
+FROM IT_user_history h
+INNER JOIN (
+    SELECT user_no_pc, user_project, MAX(history_id) AS max_id
+    FROM IT_user_history
+    GROUP BY user_no_pc, user_project
+) latest 
+ON latest.user_no_pc = h.user_no_pc
+AND latest.user_project = h.user_project
+AND latest.max_id = h.history_id
+
+LEFT JOIN IT_assets a ON a.no_pc = h.user_no_pc
+
+LEFT JOIN (
+    SELECT *
+    FROM IT_RepairTickets r1
+    WHERE r1.ticket_id = (
+        SELECT MAX(r2.ticket_id)
+        FROM IT_RepairTickets r2
+        WHERE r2.user_no_pc = r1.user_no_pc
+        AND r2.project = r1.project
+    )
+) r ON r.user_no_pc = h.user_no_pc
+ AND r.project = h.user_project
+
+WHERE 1=1
+";
+
+$params = [];
+
+if($search){
+    $sql .= " AND (h.user_no_pc LIKE ? OR a.type_equipment LIKE ?)";
+    $params[]="%$search%";
+    $params[]="%$search%";
+}
+
+if($project){
+    $sql .= " AND h.user_project = ?";
+    $params[]=$project;
+}
+
+if($status == 'open'){
+    $sql .= " AND h.end_date IS NULL";
+}
+if($status == 'close'){
+    $sql .= " AND h.end_date IS NOT NULL";
+}
+
+if($grade){
+    $sql .= " AND a.device_grade = ?";
+    $params[]=$grade;
+}
+
+if($repair_status){
+    $sql .= " AND LTRIM(RTRIM(r.status)) = ?";
+    $params[]=$repair_status;
+}
+
+$stmt = $conn->prepare($sql);
+$stmt->execute($params);
+$data = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+/* ================= KPI ================= */
+$totalRevenue = 0;
+$typeSummary = [];
+$typeCount = [];
+$typeDetail = [];
+$revenueDetail = [];
+
+/* 🔥 เพิ่ม: เก็บวันเช่า + รวมต่อประเภท */
+$typeDaySummary = [];   // รวมวันต่อประเภท
+$typePriceSummary = []; // รวมเงินต่อประเภท
+
+foreach($data as $d){
+
+    $type = $d['type_equipment'];
+
+    // 🔥 รวมวันเช่า
+    $typeDaySummary[$type] = ($typeDaySummary[$type] ?? 0) + $d['total_days'];
+
+    // 🔥 รวมเงิน (จริงๆมีอยู่แล้ว แต่แยกไว้ใช้ modal)
+    $typePriceSummary[$type] = ($typePriceSummary[$type] ?? 0) + $d['total_price'];
+}
+foreach($data as $d){
+
+    $totalRevenue += $d['total_price'];
+
+    $type = $d['type_equipment'];
+
+    $typeSummary[$type] = ($typeSummary[$type] ?? 0) + $d['total_price'];
+    $typeCount[$type] = ($typeCount[$type] ?? 0) + 1;
+
+    $typeDetail[$type][] = $d['user_no_pc'];
+
+    $revenueDetail[$type][] = [
+        'pc'=>$d['user_no_pc'],
+        'price'=>$d['total_price']
+    ];
+}
+
+$totalDevice = count($data);
+$totalType   = count($typeCount);
+
+/* DONUT */
+$gradeCount = ['A'=>0,'B'=>0,'C'=>0];
+foreach($data as $d){
+    if(isset($gradeCount[$d['device_grade']])){
+        $gradeCount[$d['device_grade']]++;
+    }
+}
+
+$projects = $conn->query("SELECT DISTINCT user_project FROM IT_user_history")->fetchAll(PDO::FETCH_COLUMN);
+?>
+
+
+******************************************************
 user/transfer_receive_detail.php
 ✔ ลบ asset จากต้นทาง (user_information)
 ✔ เพิ่ม asset ที่ปลายทาง

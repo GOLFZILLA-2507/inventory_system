@@ -35,7 +35,7 @@
                     <a class="nav-link" href="admin_rental_price_manage.php">💰 จัดการราคาเช่า</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="admin_rental_dashboard.php">📊 แดชบอร์ดเช่า</a>
+                    <a class="nav-link" href="transfer_s_project.php">🚚 ส่งมอบอุปกรณ์</a>
                 </li>
 
                 <li class="nav-item">

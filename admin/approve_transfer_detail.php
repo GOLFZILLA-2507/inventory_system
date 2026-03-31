@@ -3,6 +3,8 @@ require_once '../config/connect.php';
 require_once '../config/checklogin.php';
 
 $round = $_GET['round'] ?? 0;
+// 🔥 ดึง role จาก session
+$role = $_SESSION['role_ivt'] ?? '';
 
 /* =====================================================
 🔥 อนุมัติรายการ
@@ -243,7 +245,7 @@ class="item">
 </a>
 
 <!-- 🔥 เงื่อนไขปุ่ม -->
-<?php if($remain > 0){ ?>
+<?php if($remain > 0 && $role != 'MD'){ ?>
 <button class="btn btn-main" name="approve_selected">
 ✅ อนุมัติที่เลือก
 </button>

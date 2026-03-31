@@ -15,8 +15,6 @@ if(isset($_POST['submit'])){
 $uploadDir = "../uploads/repair/";
 
 $img1="";
-$img2="";
-$img3="";
 
 /* ===== Upload รูป ===== */
 
@@ -31,9 +29,6 @@ $filename = time()."_".$i."_".basename($_FILES['images']['name'][$i]);
 move_uploaded_file($_FILES['images']['tmp_name'][$i],$uploadDir.$filename);
 
 if($i==0) $img1=$filename;
-if($i==1) $img2=$filename;
-if($i==2) $img3=$filename;
-
 }
 
 }
@@ -44,8 +39,8 @@ if($i==2) $img3=$filename;
 
 $stmt = $conn->prepare("
 INSERT INTO IT_RepairTickets
-(asset_id,user_id,user_name,problem,priority,img1,img2,img3,user_new_no,user_no_pc,user_equipment_details,user_type_equipment,project)
-VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+(asset_id,user_id,user_name,problem,priority,img1,user_no_pc,user_type_equipment,project)
+VALUES (?,?,?,?,?,?,?,?,?)
 ");
 
 $stmt->execute([
@@ -55,11 +50,7 @@ $_SESSION['fullname'],
 $_POST['problem'],
 $_POST['priority'] ?? 'Normal',
 $img1,
-$img2,
-$img3,
-$_POST['asset_id'], // ส่งค่า equipment code ไปที่ user_new_no
 $_POST['asset_id'], // ส่งค่า equipment code ไปที่ user_no_pc
-$_POST['user_equipment_details'] ?? '',
 $_POST['user_type_equipment'] ?? '',
 $userProject
 ]);

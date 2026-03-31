@@ -140,14 +140,14 @@ include 'partials/sidebar.php';
 </div>
 </div>
 
-<!-- 🔥 โอนย้าย -->
+<!-- 🔥 โอนย้าย
 <div class="col-md-4">
 <div class="dashboard-card card-info">
 <h5>📦 รายการส่งมอบและโอนย้ายทั้งหมด</h5>
 <h2><?= $sent ?></h2>
 <a href="admin_transfer_sent.php" class="btn btn-light btn-sm">ดูรายการ</a>
 </div>
-</div>
+</div> -->
 
 <!-- 🔥 อุปกรณ์ -->
 <div class="col-md-4">
@@ -159,6 +159,19 @@ include 'partials/sidebar.php';
 </div>
 
 <?php endif; ?>
+
+<!-- =====================================================
+🔥 🔥 NEW: Dashboard ค่าเช่า (ADMIN + MD เห็น)
+===================================================== -->
+<div class="col-md-4">
+<div class="dashboard-card card-indigo">
+<h5>💰 ค่าเช่าอุปกรณ์</h5>
+<h2>📊</h2>
+<a href="admin_rental_dashboard.php" class="btn btn-light btn-sm">เข้าใช้งาน</a>
+</div>
+</div>
+
+</div>
 
 </div>
 
