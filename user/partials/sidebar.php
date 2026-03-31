@@ -75,6 +75,17 @@ if($role == 'hr'):
                             </a>
                         </li>
 
+                         <li>
+                            <a class="dropdown-item" href="asset_assign_no_code.php">
+                                ➕ เพิ่มอุปกรณ์ (ไม่มีรหัส อุปกรณ์หลัก)
+                            </a>    
+                        </li>
+                        <li>
+                            <a class="dropdown-item" href="asset_assign_shared.php">
+                                ➕ เพิ่มอุปกรณ์ (ไม่มีรหัส อุปกรณ์ใช้ร่วม)
+                            </a>
+                        </li>
+
                     </ul>
 
                 </li>

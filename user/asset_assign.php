@@ -2,81 +2,15 @@
 require_once '../config/connect.php';
 require_once '../config/checklogin.php';
 
-$site = $_SESSION['site'];
-$user = $_SESSION['fullname'];
 
-/* =========================================
-🔥 ตรวจอุปกรณ์ซ้ำ + บอกว่า ซ้ำที่ไหน
-========================================= */
-function checkDuplicateDetail($conn,$no_pc){
 
-    $stmt = $conn->prepare("
-    SELECT TOP 1 
-        user_employee,
-        user_project,
 
-        CASE 
-            WHEN user_no_pc = ? THEN 'PC'
-            WHEN user_monitor1 = ? THEN 'Monitor1'
-            WHEN user_monitor2 = ? THEN 'Monitor2'
-            WHEN user_ups = ? THEN 'UPS'
-        END AS duplicate_field
+ini_set('display_errors', 1);
+error_reporting(E_ALL);
+$conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
-    FROM IT_user_information
-    WHERE 
-        user_no_pc = ?
-        OR user_monitor1 = ?
-        OR user_monitor2 = ?
-        OR user_ups = ?
-    ");
-
-    $stmt->execute([
-        $no_pc,$no_pc,$no_pc,$no_pc,
-        $no_pc,$no_pc,$no_pc,$no_pc
-    ]);
-
-    return $stmt->fetch(PDO::FETCH_ASSOC);
-}
-
-/* =========================================
-🔥 NEW: บันทึก history (1 อุปกรณ์ = 1 row)
-+ เก็บประเภทลง history_type
-========================================= */
-function saveHistoryNew($conn,$emp,$site,$no_pc,$admin){
-
-    // 🔥 ดึงประเภทอุปกรณ์
-    $stmtType = $conn->prepare("
-    SELECT type_equipment 
-    FROM IT_assets 
-    WHERE no_pc=?
-    ");
-    $stmtType->execute([$no_pc]);
-    $type = $stmtType->fetchColumn();
-
-    // 🔥 insert history
-    $stmt = $conn->prepare("
-    INSERT INTO IT_user_history (
-        user_employee,
-        user_project,
-        user_no_pc,
-        history_type,
-        start_date,
-        created_at,
-        created_by,
-        action_type
-    )
-    VALUES (?,?,?, ?,GETDATE(),GETDATE(),?,?)
-    ");
-
-    $stmt->execute([
-        $emp,
-        $site,
-        $no_pc,
-        $type,
-        $admin,
-        'assign'
-    ]);
-}
+$site = $_SESSION['site'];     // 🔥 โครงการ
+$user = $_SESSION['fullname']; // 🔥 คนที่ assign
 
 /* ================= โหลดพนักงาน ================= */
 $employees = $conn->prepare("
@@ -88,20 +22,60 @@ ORDER BY fullname
 $employees->execute([$site]);
 $employees = $employees->fetchAll(PDO::FETCH_ASSOC);
 
-/* ================= โหลดอุปกรณ์ ================= */
+/* =========================================
+🔥 ตรวจซ้ำทั้งระบบ
+========================================= */
+function checkDuplicateDetail($conn,$no_pc){
+
+    $stmt = $conn->prepare("
+    SELECT TOP 1 user_employee,user_project
+    FROM IT_user_information
+    WHERE user_no_pc=? 
+    OR user_monitor1=? 
+    OR user_monitor2=? 
+    OR user_ups=?
+    ");
+
+    $stmt->execute([$no_pc,$no_pc,$no_pc,$no_pc]);
+    return $stmt->fetch(PDO::FETCH_ASSOC);
+}
+
+/* =========================================
+🔥 บันทึก history (1 อุปกรณ์ = 1 row)
+========================================= */
+function saveHistoryNew($conn,$emp,$site,$no_pc,$admin){
+
+    $type = $conn->prepare("SELECT type_equipment FROM IT_assets WHERE no_pc=?");
+    $type->execute([$no_pc]);
+    $type = $type->fetchColumn() ?: 'UNKNOWN';
+
+    $stmt = $conn->prepare("
+    INSERT INTO IT_user_history (
+        user_employee,user_project,user_no_pc,
+        history_type,start_date,created_at,
+        created_by,action_type
+    )
+    VALUES (?,?,?, ?,GETDATE(),GETDATE(),?,?)
+    ");
+
+    $stmt->execute([
+        $emp,$site,$no_pc,$type,$admin,'assign'
+    ]);
+}
+
+/* =========================================
+🔥 โหลดข้อมูลอุปกรณ์
+========================================= */
 function getAssets($conn,$types){
+    $in = str_repeat('?,',count($types)-1).'?';
 
-    $in  = str_repeat('?,', count($types) - 1) . '?';
-
-    $sql = "
-    SELECT asset_id,no_pc,new_no,Equipment_details,type_equipment,spec,ram,ssd,gpu
+    $stmt = $conn->prepare("
+    SELECT asset_id,no_pc,new_no,Equipment_details,
+       type_equipment,spec,ram,ssd,gpu
     FROM IT_assets
     WHERE type_equipment IN ($in)
-    AND (use_it IS NULL OR use_it = '')
-    ORDER BY no_pc
-    ";
-
-    $stmt = $conn->prepare($sql);
+    AND (use_it IS NULL OR use_it='')
+    ");
     $stmt->execute($types);
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
@@ -110,197 +84,151 @@ $computers = getAssets($conn,['PC','Notebook','All_In_One']);
 $monitors  = getAssets($conn,['Monitor']);
 $upsList   = getAssets($conn,['UPS']);
 
-/* ================= SUBMIT ================= */
+/* =========================================
+🔥 SUBMIT
+========================================= */
 if(isset($_POST['submit'])){
 
-    $emp  = $_POST['employee'] ?? null;
-    $asset_id = $_POST['asset_id'] ?? null;
-    $m1  = $_POST['monitor1'] ?? null;
-    $m2  = $_POST['monitor2'] ?? null;
-    $ups = $_POST['ups'] ?? null;
+    $emp  = $_POST['employee'];
+    $asset_id = $_POST['asset_id'];
+    $m1 = $_POST['monitor1'];
+    $m2 = $_POST['monitor2'];
+    $ups = $_POST['ups'];
 
-    /* 🔴 ตรวจ input */
     if(empty($emp)){
-        echo "<script>alert('กรุณาเลือกพนักงาน');history.back();</script>";
+        echo "<script>alert('เลือกพนักงาน');history.back();</script>";
         exit;
     }
 
-    if($emp == $site){
-        echo "<script>alert('ห้าม assign ให้โครงการ');history.back();</script>";
+    /* 🔥 ต้องเลือกอย่างน้อย 1 */
+    if(empty($asset_id) && empty($m1) && empty($m2) && empty($ups)){
+        echo "<script>alert('เลือกอุปกรณ์อย่างน้อย 1');history.back();</script>";
         exit;
     }
 
-    /* ================= โหลด PC ================= */
-    $pc = null;
+    try{
 
-    if(!empty($asset_id)){
+        $conn->beginTransaction();
+
+        /* ================= หา user ================= */
         $stmt = $conn->prepare("
-        SELECT no_pc FROM IT_assets WHERE asset_id=?
+        SELECT * FROM IT_user_information
+        WHERE user_employee=? AND user_project=?
         ");
-        $stmt->execute([$asset_id]);
-        $pc = $stmt->fetchColumn();
-    }
+        $stmt->execute([$emp,$site]);
+        $u = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    /* ================= หา user ================= */
-    $stmt = $conn->prepare("
-    SELECT * FROM IT_user_information
-    WHERE user_employee=? AND user_project=?
-    ");
-    $stmt->execute([$emp,$site]);
-    $userRow = $stmt->fetch(PDO::FETCH_ASSOC);
+        /* 🔥 ถ้าไม่มี → insert */
+        if(!$u){
+            $conn->prepare("
+            INSERT INTO IT_user_information(user_employee,user_project,user_update)
+            VALUES(?,?,GETDATE())
+            ")->execute([$emp,$site]);
 
-    /* =========================================
-    🔴 กรณีไม่มี user → INSERT ใหม่
-    ========================================= */
-    if(!$userRow){
-
-        $stmt = $conn->prepare("
-        INSERT INTO IT_user_information(
-            user_employee,user_project,
-            user_no_pc,
-            user_monitor1,user_monitor2,user_ups,
-            user_update,user_record
-        )
-        VALUES(?,?,?,?,?,?,GETDATE(),?)
-        ");
-
-        $stmt->execute([
-            $emp,
-            $site,
-            $pc,
-            $m1,
-            $m2,
-            $ups,
-            $user
-        ]);
-
-        $userRow = [
-            'user_no_pc'=>$pc,
-            'user_monitor1'=>$m1,
-            'user_monitor2'=>$m2,
-            'user_ups'=>$ups,
-            'id'=>$conn->lastInsertId()
-        ];
-    }
-
-    /* =========================================
-    🔵 PC
-    ========================================= */
-    if(!empty($pc)){
-
-        $dup = checkDuplicateDetail($conn,$pc);
-
-        if($dup){
-            echo "<script>alert('❌ อุปกรณ์ซ้ำ\nรหัส: $pc\nใช้โดย: {$dup['user_employee']}\nโครงการ: {$dup['user_project']}\nตำแหน่ง: {$dup['duplicate_field']}');history.back();</script>";
-            exit;
+            $u = [
+                'id'=>$conn->lastInsertId(),
+                'user_no_pc'=>null,
+                'user_monitor1'=>null,
+                'user_monitor2'=>null,
+                'user_ups'=>null
+            ];
         }
 
-        if(!empty($userRow['user_no_pc'])){
-            echo "<script>alert('❌ ผู้ใช้นี้มี PC อยู่แล้ว');history.back();</script>";
-            exit;
+        /* ================= PC ================= */
+        if(!empty($asset_id)){
+
+            $pc = $conn->prepare("SELECT no_pc FROM IT_assets WHERE asset_id=?");
+            $pc->execute([$asset_id]);
+            $pc = $pc->fetchColumn();
+
+            if(checkDuplicateDetail($conn,$pc)){
+                throw new Exception("PC ซ้ำ $pc");
+            }
+
+            if(!empty($u['user_no_pc'])){
+                throw new Exception("มี PC แล้ว");
+            }
+
+            // 🔥 update user
+            $conn->prepare("UPDATE IT_user_information SET user_no_pc=? WHERE id=?")
+            ->execute([$pc,$u['id']]);
+
+            // 🔥 update asset → ใช้ project
+            $conn->prepare("
+            UPDATE IT_assets SET use_it=?, project=?, [update]=GETDATE()
+            WHERE no_pc=?
+            ")->execute([$site,$site,$pc]);
+
+            saveHistoryNew($conn,$emp,$site,$pc,$user);
         }
 
-        $conn->prepare("
-        UPDATE IT_user_information
-        SET user_no_pc=?
-        WHERE id=?
-        ")->execute([$pc,$userRow['id']]);
+        /* ================= MONITOR ================= */
+        foreach([$m1,$m2] as $monitor){
 
-        $conn->prepare("
-        UPDATE IT_assets 
-        SET use_it=?, project=?, [update]=GETDATE()
-        WHERE no_pc=?
-        ")->execute([$emp,$site,$pc]);
+            if(empty($monitor)) continue;
 
-        saveHistoryNew($conn,$emp,$site,$pc,$user);
-    }
+            if(checkDuplicateDetail($conn,$monitor)){
+                throw new Exception("Monitor ซ้ำ $monitor");
+            }
 
-    /* =========================================
-    🟡 MONITOR
-    ========================================= */
-    $monitorList = [];
-    if(!empty($m1)) $monitorList[] = $m1;
-    if(!empty($m2)) $monitorList[] = $m2;
+            if(empty($u['user_monitor1'])){
+                $conn->prepare("UPDATE IT_user_information SET user_monitor1=? WHERE id=?")
+                ->execute([$monitor,$u['id']]);
 
-    foreach($monitorList as $monitor){
+                $u['user_monitor1']=$monitor;
 
-        $dup = checkDuplicateDetail($conn,$monitor);
+            }elseif(empty($u['user_monitor2'])){
+                $conn->prepare("UPDATE IT_user_information SET user_monitor2=? WHERE id=?")
+                ->execute([$monitor,$u['id']]);
 
-        if($dup){
-            echo "<script>alert('❌ Monitor ซ้ำ\nรหัส: $monitor\nใช้โดย: {$dup['user_employee']}\nโครงการ: {$dup['user_project']}');history.back();</script>";
-            exit;
-        }
+                $u['user_monitor2']=$monitor;
 
-        if(empty($userRow['user_monitor1'])){
+            }else{
+                throw new Exception("Monitor เต็ม 2 แล้ว");
+            }
 
             $conn->prepare("
-            UPDATE IT_user_information 
-            SET user_monitor1=? 
-            WHERE id=?
-            ")->execute([$monitor,$userRow['id']]);
+            UPDATE IT_assets SET use_it=?, project=?, [update]=GETDATE()
+            WHERE no_pc=?
+            ")->execute([$site,$site,$monitor]);
 
-            $userRow['user_monitor1'] = $monitor;
+            saveHistoryNew($conn,$emp,$site,$monitor,$user);
+        }
 
-        }elseif(empty($userRow['user_monitor2'])){
+        /* ================= UPS ================= */
+        if(!empty($ups)){
+
+            if(checkDuplicateDetail($conn,$ups)){
+                throw new Exception("UPS ซ้ำ $ups");
+            }
+
+            if(!empty($u['user_ups'])){
+                throw new Exception("มี UPS แล้ว");
+            }
+
+            $conn->prepare("UPDATE IT_user_information SET user_ups=? WHERE id=?")
+            ->execute([$ups,$u['id']]);
 
             $conn->prepare("
-            UPDATE IT_user_information 
-            SET user_monitor2=? 
-            WHERE id=?
-            ")->execute([$monitor,$userRow['id']]);
+            UPDATE IT_assets SET use_it=?, project=?, [update]=GETDATE()
+            WHERE no_pc=?
+            ")->execute([$site,$site,$ups]);
 
-            $userRow['user_monitor2'] = $monitor;
-
-        }else{
-            echo "<script>alert('จอครบ 2 แล้ว');history.back();</script>";
-            exit;
+            saveHistoryNew($conn,$emp,$site,$ups,$user);
         }
 
-        $conn->prepare("
-        UPDATE IT_assets 
-        SET use_it=?, project=?, [update]=GETDATE()
-        WHERE no_pc=?
-        ")->execute([$emp,$site,$monitor]);
+        $conn->commit();
 
-        saveHistoryNew($conn,$emp,$site,$monitor,$user);
+        header("Location: asset_shared_view.php?success=1");
+        exit;
+
+    }catch(Exception $e){
+
+        $conn->rollBack();
+        echo "<script>alert('❌ ".$e->getMessage()."');history.back();</script>";
+        exit;
     }
-
-    /* =========================================
-    🟣 UPS
-    ========================================= */
-    if(!empty($ups)){
-
-        $dup = checkDuplicateDetail($conn,$ups);
-
-        if($dup){
-            echo "<script>alert('❌ UPS ซ้ำ\nรหัส: $ups\nใช้โดย: {$dup['user_employee']}\nโครงการ: {$dup['user_project']}');history.back();</script>";
-            exit;
-        }
-
-        if(!empty($userRow['user_ups'])){
-            echo "<script>alert('❌ มี UPS แล้ว');history.back();</script>";
-            exit;
-        }
-
-        $conn->prepare("
-        UPDATE IT_user_information
-        SET user_ups=?
-        WHERE id=?
-        ")->execute([$ups,$userRow['id']]);
-
-        $conn->prepare("
-        UPDATE IT_assets 
-        SET use_it=?, project=?, [update]=GETDATE()
-        WHERE no_pc=?
-        ")->execute([$emp,$site,$ups]);
-
-        saveHistoryNew($conn,$emp,$site,$ups,$user);
-    }
-
-    header("Location: asset_shared_view.php?success=1");
-    exit;
 }
-
 include 'partials/header.php';
 include 'partials/sidebar.php';
 ?>

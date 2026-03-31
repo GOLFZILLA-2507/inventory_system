@@ -113,7 +113,7 @@ function mergeValue($old, $newArr){
     $oldArr = array_map('trim', $oldArr);
     $newArr = array_map('trim', $newArr);
 
-    $final = array_unique(array_merge($oldArr, $newArr));
+    $final = array_merge($oldArr, $newArr); // 🔥 เอา unique ออก
     $final = array_filter($final);
 
     return !empty($final) ? implode(',', $final) : null;

@@ -288,15 +288,12 @@ if(empty($row[$field])) continue;
 
 foreach(explode(',',$row[$field]) as $code){
 
-$code = trim($code);
+    $code = trim($code);
 
-// ❌ ตัดของที่โอนแล้ว
-if(in_array($code,$transfered)) continue;
+    if($code == '') continue;
 
-$key = $type.$code;
-if(isset($unique[$key])) continue;
-
-$unique[$key]=1;
+    // ❌ ตัดของที่โอนแล้ว
+    if(in_array($code,$transfered)) continue;
 ?>
 
 <tr>
