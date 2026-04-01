@@ -2,13 +2,18 @@
 require_once '../config/connect.php';
 require_once '../config/checklogin.php';
 
-$site = $_SESSION['site'];
-$user = $_SESSION['fullname'];
+/* =====================================================
+🔐 Session
+===================================================== */
+$site = $_SESSION['site'];       // โครงการปลายทาง (ผู้รับ)
+$user = $_SESSION['fullname'];   // ผู้ใช้งาน
 
+// รับค่า round (ทั้ง GET / POST)
 $round = $_GET['round'] ?? ($_POST['round'] ?? 0);
 
 /* =====================================================
-🔥 โหลดข้อมูลรายการโอน
+📦 โหลดรายการโอนของรอบนี้
+- เพิ่ม admin_status เพื่อใช้เช็คอนุมัติ
 ===================================================== */
 $stmt = $conn->prepare("
 SELECT 
@@ -17,6 +22,7 @@ SELECT
     t.type,
     t.from_site,
     t.receive_status,
+    t.admin_status,           -- 🔥 สำคัญ: ใช้เช็คอนุมัติ
     a.spec,
     a.ram,
     a.ssd,
@@ -29,47 +35,71 @@ $stmt->execute([$round]);
 $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 /* =====================================================
-🔥 เช็คว่ารับครบหรือยัง
+🔍 เช็คว่า “อนุมัติครบหรือยัง”
+- ถ้ามีรายการไหนยังไม่ 'อนุมัติแล้ว' → ห้ามรับ
 ===================================================== */
-$total = count($data);
-$received = 0;
-
+$isApproved = true;
 foreach($data as $d){
-    if($d['receive_status'] == 'รับแล้ว'){
-        $received++;
+    if($d['admin_status'] !== 'อนุมัติ'){
+        $isApproved = false;
+        break;
     }
 }
 
-$isAllReceived = ($total > 0 && $received == $total);
+/* =====================================================
+🔍 เช็คว่ารับครบหรือยัง (ไว้ซ่อนปุ่ม)
+===================================================== */
+$total = count($data);
+$done = 0;
+
+foreach($data as $d){
+
+    // ✅ ถือว่า "จบแล้ว" มี 2 สถานะ
+    if(
+        $d['receive_status'] === 'รับแล้ว' ||
+        $d['receive_status'] === 'ยกเลิก' ||
+        $d['receive_status'] === 'ไม่พบอุปกรณ์นี้'
+    ){
+        $done++;
+    }
+}
+
+$isAllReceived = ($total > 0 && $done === $total);
 
 /* =====================================================
-🔥 SUBMIT (กดยืนยันตรวจรับ)
+📨 SUBMIT: ยืนยันตรวจรับ
+- ใช้ Transaction
+- กันกรณียิง POST ตรง (ต้องเช็ค $isApproved ซ้ำ)
+- ใช้ PRG (POST → REDIRECT → GET) กัน modal เด้งซ้ำ
 ===================================================== */
-$msg = "";
-$status = "";
-
 if(isset($_POST['confirm'])){
+
+    // ❌ ยังไม่อนุมัติ → ห้ามทำงาน
+    if(!$isApproved){
+        header("Location: transfer_receive_detail.php?round=".$round."&not_approved=1");
+        exit;
+    }
 
     $statusList = $_POST['status'] ?? [];
 
     try{
-
         $conn->beginTransaction();
 
         foreach($data as $row){
 
             $id = $row['transfer_id'];
 
-            // ❌ ถ้ารับแล้ว → ข้าม
-            if($row['receive_status'] == 'รับแล้ว') continue;
+            // ❌ ถ้ารับแล้ว → ข้าม (กันยิงซ้ำ)
+            if($row['receive_status'] === 'รับแล้ว') continue;
 
+            // ค่าที่ user เลือก
             $statusVal = $statusList[$id] ?? '';
-            if($statusVal == '') continue;
+            if($statusVal === '') continue;
 
             /* ===============================
             ❌ ไม่พบอุปกรณ์
             =============================== */
-            if($statusVal == 'ไม่พบอุปกรณ์นี้'){
+            if($statusVal === 'ไม่พบอุปกรณ์นี้'){
 
                 $conn->prepare("
                 UPDATE IT_AssetTransfer_Headers
@@ -81,11 +111,11 @@ if(isset($_POST['confirm'])){
             }
 
             /* ===============================
-            ✅ รับแล้ว (หัวใจสำคัญ)
+            ✅ รับแล้ว
             =============================== */
-            if($statusVal == 'รับแล้ว'){
+            if($statusVal === 'รับแล้ว'){
 
-                // 🔥 update สถานะ
+                // 🔥 อัปเดตสถานะการรับ
                 $conn->prepare("
                 UPDATE IT_AssetTransfer_Headers
                 SET receive_status='รับแล้ว',
@@ -93,30 +123,43 @@ if(isset($_POST['confirm'])){
                 WHERE transfer_id=?
                 ")->execute([$id]);
 
-                // 🔥 key จริง (สำคัญมาก)
+                // 🔑 device_code = no_pc (mapping)
                 $device_code = $row['no_pc'];
-                $from        = $row['from_site'];
+                $from        = $row['from_site']; // โครงการต้นทาง
 
-                // 🔥 ลบจากต้นทาง (ตาม requirement คุณ)
-                $conn->prepare("
-                DELETE FROM IT_user_devices
+                /* =====================================================
+                🔥 FIX BUG: ลบเฉพาะ 1 row (ไม่ลบเกิน)
+                - หา id ก่อน แล้วค่อย delete ด้วย id
+                ===================================================== */
+                $stmtDel = $conn->prepare("
+                SELECT TOP 1 id
+                FROM IT_user_devices
                 WHERE device_code=? AND user_project=?
-                ")->execute([$device_code,$from]);
+                ORDER BY id ASC
+                ");
+                $stmtDel->execute([$device_code, $from]);
+                $delRow = $stmtDel->fetch(PDO::FETCH_ASSOC);
+
+                if($delRow){
+                    $conn->prepare("
+                    DELETE FROM IT_user_devices
+                    WHERE id=?
+                    ")->execute([$delRow['id']]);
+                }
             }
         }
 
         $conn->commit();
 
-        $msg = "บันทึกการตรวจรับเรียบร้อย";
-        $status = "success";
-
-        $isAllReceived = true;
+        // 🔁 PRG: redirect เพื่อกัน refresh แล้วทำซ้ำ + modal ค้าง
+        header("Location: transfer_receive_detail.php?round=".$round."&success=1");
+        exit;
 
     }catch(Exception $e){
-
         $conn->rollBack();
-        $msg = $e->getMessage();
-        $status = "error";
+
+        header("Location: transfer_receive_detail.php?round=".$round."&error=1");
+        exit;
     }
 }
 ?>
@@ -124,36 +167,51 @@ if(isset($_POST['confirm'])){
 <?php include 'partials/header.php'; ?>
 <?php include 'partials/sidebar.php'; ?>
 
+<!-- SweetAlert -->
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
 <div class="container mt-4">
 <div class="card shadow">
 
 <div class="card-header bg-success text-white">
-ตรวจรับอุปกรณ์ (รอบ <?= $round ?>)
+ตรวจรับอุปกรณ์ (รอบ <?= htmlspecialchars($round) ?>)
 </div>
 
 <div class="card-body">
 
 <!-- =====================================================
-🔥 ปุ่มด้านบน
+🔙 ปุ่มด้านบน
+- แยกกรณี:
+  1) รับครบแล้ว → ไม่ต้องมีปุ่มยืนยัน
+  2) ยังไม่อนุมัติ → ปุ่มเตือน
+  3) อนุมัติแล้ว → ปุ่มยืนยัน
 ===================================================== -->
 <div class="d-flex justify-content-between mb-3">
 
-<a href="transfer_receive.php" class="btn btn-secondary">
+<a href="transfer_receive.php" class="btn btn-success">
 ⬅ ย้อนกลับ
 </a>
 
 <?php if(!$isAllReceived): ?>
-<button type="button" id="openConfirm" class="btn btn-success">
-✔ ยืนยันการตรวจรับ
-</button>
+
+    <?php if($isApproved): ?>
+        <!-- ✅ อนุมัติแล้ว → กดได้ -->
+        <button type="button" id="openConfirm" class="btn btn-success">
+        ✔ ยืนยันการตรวจรับ
+        </button>
+    <?php else: ?>
+        <!-- ❌ ยังไม่อนุมัติ -->
+        <button type="button" id="notApprovedBtn" class="btn btn-secondary">
+        ⛔ รอ Admin อนุมัติ
+        </button>
+    <?php endif; ?>
+
 <?php endif; ?>
 
 </div>
 
 <form method="post" id="mainForm">
-<input type="hidden" name="round" value="<?= $round ?>">
+<input type="hidden" name="round" value="<?= htmlspecialchars($round) ?>">
 
 <table class="table table-bordered text-center">
 
@@ -167,24 +225,34 @@ if(isset($_POST['confirm'])){
 </tr>
 
 <?php $i=1; foreach($data as $d): ?>
-<tr>
+<tr class="<?= $d['receive_status']=='ยกเลิก' ? 'table-secondary' : '' ?>">
 
 <td><?= $i++ ?></td>
 
 <td>
-
 <?php
-if($d['receive_status']=='รับแล้ว'){
+
+// 🔴 ยกเลิก → แสดงอย่างเดียว ห้ามเลือก
+if($d['receive_status'] === 'ยกเลิก'){
+    echo '<span class="badge bg-danger">ถูกยกเลิก</span>';
+}
+
+// 🟢 รับแล้ว
+elseif($d['receive_status'] === 'รับแล้ว'){
     echo '<span class="badge bg-success">รับแล้ว</span>';
 }
-elseif($d['receive_status']=='ไม่พบอุปกรณ์นี้'){
+
+// 🔴 ไม่พบ
+elseif($d['receive_status'] === 'ไม่พบอุปกรณ์นี้'){
     echo '<span class="badge bg-danger">ไม่พบ</span>';
 }
+
+// 🟡 ยังไม่ตรวจรับ → ให้เลือก
 else{
 ?>
 <select name="status[<?= $d['transfer_id'] ?>]"
 class="form-select form-select-sm status-select"
-data-no="<?= $d['no_pc'] ?>">
+data-no="<?= htmlspecialchars($d['no_pc']) ?>">
 
 <option value="">-- เลือก --</option>
 <option value="รับแล้ว">✅ รับ</option>
@@ -192,12 +260,11 @@ data-no="<?= $d['no_pc'] ?>">
 
 </select>
 <?php } ?>
-
 </td>
 
-<td><?= $d['from_site'] ?></td>
-<td><?= $d['no_pc'] ?></td>
-<td><?= $d['type'] ?></td>
+<td><?= htmlspecialchars($d['from_site']) ?></td>
+<td><?= htmlspecialchars($d['no_pc']) ?></td>
+<td><?= htmlspecialchars($d['type']) ?></td>
 
 <td>
 <?php
@@ -220,7 +287,7 @@ echo empty($specParts) ? '-' : implode(' | ',$specParts);
 </div>
 
 <!-- =====================================================
-🔥 MODAL CONFIRM
+🧾 MODAL CONFIRM
 ===================================================== -->
 <div class="modal fade" id="confirmModal">
 <div class="modal-dialog modal-dialog-centered">
@@ -253,7 +320,7 @@ echo empty($specParts) ? '-' : implode(' | ',$specParts);
 
 <script>
 /* =====================================================
-🔥 เปิด modal + สรุปรายการ
+📊 สรุปรายการก่อนกดยืนยัน
 ===================================================== */
 let btn = document.getElementById("openConfirm");
 
@@ -263,8 +330,8 @@ btn.onclick = function(){
 let ok="",fail="";
 
 document.querySelectorAll(".status-select").forEach(sel=>{
-    if(sel.value=="รับแล้ว") ok+="✔ "+sel.dataset.no+"<br>";
-    if(sel.value=="ไม่พบอุปกรณ์นี้") fail+="✖ "+sel.dataset.no+"<br>";
+    if(sel.value==="รับแล้ว") ok+="✔ "+sel.dataset.no+"<br>";
+    if(sel.value==="ไม่พบอุปกรณ์นี้") fail+="✖ "+sel.dataset.no+"<br>";
 });
 
 document.getElementById("listOk").innerHTML = ok || "ไม่มี";
@@ -273,18 +340,50 @@ document.getElementById("listFail").innerHTML = fail || "ไม่มี";
 new bootstrap.Modal(document.getElementById('confirmModal')).show();
 };
 }
+
+/* =====================================================
+⛔ ยังไม่อนุมัติ → แจ้งเตือน
+===================================================== */
+let btnBlock = document.getElementById("notApprovedBtn");
+
+if(btnBlock){
+btnBlock.onclick = function(){
+    Swal.fire({
+        icon:'warning',
+        title:'ยังไม่สามารถรับได้',
+        text:'รายการนี้ยังไม่ได้รับการอนุมัติจาก Admin'
+    });
+};
+}
 </script>
 
 <!-- =====================================================
-🔥 SUCCESS
+🔔 SUCCESS / ERROR / NOT APPROVED (ใช้ GET → ไม่ค้าง)
 ===================================================== -->
-<?php if($msg): ?>
+<?php if(isset($_GET['success'])): ?>
 <script>
 Swal.fire({
-icon:'<?= $status ?>',
-title:'<?= $msg ?>'
-}).then(()=>{
-location.reload();
+icon:'success',
+title:'บันทึกการตรวจรับเรียบร้อย'
+});
+</script>
+<?php endif; ?>
+
+<?php if(isset($_GET['error'])): ?>
+<script>
+Swal.fire({
+icon:'error',
+title:'เกิดข้อผิดพลาด'
+});
+</script>
+<?php endif; ?>
+
+<?php if(isset($_GET['not_approved'])): ?>
+<script>
+Swal.fire({
+icon:'warning',
+title:'ยังไม่อนุมัติ',
+text:'ต้องรอ Admin อนุมัติก่อน'
 });
 </script>
 <?php endif; ?>

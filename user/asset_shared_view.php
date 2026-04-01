@@ -171,42 +171,49 @@ border:1px solid #000;
 <div class="row mb-4">
 
 <div class="col-md-3">
-<a href="asset_available.php"></a>
+<a href="asset_available.php" class="text-decoration-none">
 <div class="card bg-danger text-white text-center shadow">
 <div class="card-body">
-<h6>🖥 ไม่มีผู้ใช้</h6>
+<h6>🖥 อุปกรณ์ไม่มีผู้ใช้</h6>
 <h2><?= $count_no_user ?></h2>
 </div>
 </div>
+</a>
 </div>
 
 <div class="col-md-3">
-<a href="transfer_list.php"></a>
+<a href="transfer_list.php" class="text-decoration-none">
 <div class="card bg-primary text-white text-center shadow">
 <div class="card-body">
-<h6>📦 ส่งออก</h6>
+<h6>📦 รายการโอนย้าย/ส่งคืน</h6>
 <h2><?= $count_sent ?></h2>
 </div>
 </div>
+</a>
 </div>
 
 <div class="col-md-3">
-<div class="card bg-warning text-dark text-center shadow">
+<a href="transfer_receive.php" class="text-decoration-none">
+<div class="card bg-warning text-white text-center shadow">
 <div class="card-body">
 <h6>📥 รอตรวจรับ</h6>
 <h2><?= $count_receive ?></h2>
 </div>
 </div>
+</a>
 </div>
 
 <div class="col-md-3">
+<a href="repair_status.php" class="text-decoration-none">
 <div class="card bg-success text-white text-center shadow">
 <div class="card-body">
-<h6>🛠 ซ่อม</h6>
+<h6>🛠 แจ้งซ่อม</h6>
 <h2><?= $count_repair ?></h2>
 </div>
 </div>
+</a>
 </div>
+
 
 </div>
 

@@ -92,8 +92,12 @@ SELECT
     sent_transfer,
     from_site,
     MIN(transfer_date) AS transfer_date,
+
     COUNT(*) AS total_items,
-    MAX(receive_status) AS receive_status
+
+    -- 🔥 นับจำนวนที่รับแล้ว
+    SUM(CASE WHEN receive_status = 'รับแล้ว' THEN 1 ELSE 0 END) AS received_items
+
 FROM IT_AssetTransfer_Headers
 WHERE to_site = ?
 AND (receive_status IS NULL OR receive_status != 'ยกเลิก')
@@ -124,6 +128,7 @@ include 'partials/sidebar.php';
 <th>รอบการส่ง</th>
 <th>จากโครงการ</th>
 <th>จำนวนอุปกรณ์</th>
+<th>จำนวนที่รับแล้ว</th>
 <th>วันที่โอน</th>
 <th>ตรวจเช็คอุปกรณ์</th>
 <th>พิมพ์ใบตรวจเช็ค</th>
@@ -147,6 +152,12 @@ include 'partials/sidebar.php';
 <td>
 <span class="badge bg-dark">
 <?= $d['total_items'] ?> รายการ
+</span>
+</td>
+<td>
+
+<span class="badge bg-info">
+<?= $d['received_items'] ?> / <?= $d['total_items'] ?>
 </span>
 </td>
 
@@ -176,14 +187,14 @@ class="btn btn-secondary btn-sm" target="_blank">
 
 <td>
 <?php
-if($d['receive_status'] == 'รับแล้ว'){
-    echo "<span class='badge bg-success'>✅ ตรวจรับแล้ว</span>";
+if($d['received_items'] == 0){
+    echo "<span class='badge bg-secondary'>⏳ ยังไม่ได้ตรวจรับ</span>";
 }
-elseif($d['receive_status'] == 'รอตรวจรับ' || empty($d['receive_status'])){
-    echo "<span class='badge bg-warning text-dark'>⏳ ยังไม่ได้ตรวจรับ</span>";
+elseif($d['received_items'] < $d['total_items']){
+    echo "<span class='badge bg-warning text-dark'>📦 รับบางรายการ</span>";
 }
 else{
-    echo "<span class='badge bg-secondary'>-</span>";
+    echo "<span class='badge bg-success'>✅ รับครบแล้ว</span>";
 }
 ?>
 </td>
@@ -195,9 +206,9 @@ else{
 </table>
 <!-- 🔥 ปุ่มย้อนกลับ (อยู่ล่าง) -->
 <div class="mt-3 text-start">
-    <button onclick="history.back()" class="btn btn-secondary">
-        ⬅️ ย้อนกลับ
-    </button>
+    <a href="asset_shared_view.php" class="btn btn-secondary">
+        ⬅️ กลับหน้าหลัก
+    </a>
 </div>
 </div>
 </div>

@@ -119,11 +119,9 @@ else{
 echo '<span class="badge bg-warning text-dark">ยังไม่ตรวจรับ</span>';
 }
 ?>
-</td>
-
 <td class="text-center">
 
-<?php if($d['receive_status'] != 'ยกเลิก'): ?>
+<?php if($d['receive_status'] != 'ยกเลิก' && $d['receive_status'] != 'รับแล้ว'): ?>
 
 <form method="post" onsubmit="return confirm('ยืนยันยกเลิกรายการนี้?');">
     <input type="hidden" name="cancel_id" value="<?= $d['transfer_id'] ?>">
@@ -134,7 +132,11 @@ echo '<span class="badge bg-warning text-dark">ยังไม่ตรวจร
 
 <?php else: ?>
 
-<span class="badge bg-secondary">ยกเลิกแล้ว</span>
+<?php if($d['receive_status'] == 'รับแล้ว'): ?>
+    <span class="badge bg-success"></span>
+<?php else: ?>
+    <span class="badge bg-secondary">ยกเลิกแล้ว</span>
+<?php endif; ?>
 
 <?php endif; ?>
 

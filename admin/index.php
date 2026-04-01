@@ -1,10 +1,12 @@
-<?php $role = $_SESSION['role_ivt'] ?? ''; // กำหนดค่าเริ่มต้นเป็น 'user' หากไม่มี session ?>
 <?php
 require_once '../config/connect.php';
 require_once '../config/checklogin.php';
 
+$role = $_SESSION['role_ivt'] ?? '';
+$site = $_SESSION['site'];
+
 /* =====================================================
-🔥 ดึงข้อมูล Dashboard
+🔥 Dashboard
 ===================================================== */
 
 // 🔥 รออนุมัติ
@@ -15,15 +17,18 @@ WHERE admin_status = 'รออนุมัติ'
 AND (receive_status IS NULL OR receive_status != 'ยกเลิก')
 ")->fetchColumn();
 
-// 🔥 แจ้งซ่อม (สมมุติ table repair)
+// 🔥 แจ้งซ่อม
 $repair = $conn->query("
 SELECT COUNT(*) FROM IT_RepairTickets WHERE status = 'รอรับเรื่อง'
 ")->fetchColumn();
 
-// 🔥 ไม่มีผู้ใช้
+// 🔥 ❗ ไม่มีผู้ใช้ (เปลี่ยนฐานเป็น IT_user_devices)
 $noUser = $conn->query("
-SELECT COUNT(*) FROM IT_user_information
-WHERE user_employee IS NULL
+SELECT COUNT(*) 
+FROM IT_assets a
+LEFT JOIN IT_user_devices d 
+ON a.no_pc = d.device_code
+WHERE d.device_code IS NULL
 ")->fetchColumn();
 
 // 🔥 ส่งแล้ว

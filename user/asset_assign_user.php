@@ -110,13 +110,14 @@ if(isset($_POST['save'])){
         die("<script>alert('เลือกผู้ใช้');history.back();</script>");
     }
 
-    /* ===============================
-    🔥 CHECK DUPLICATE
-    =============================== */
+    // 🔥 ไม่เช็คซ้ำ ถ้าเป็น "ไม่มีรหัสอุปกรณ์"
+    if($no_pc !== 'ไม่มีรหัสอุปกรณ์'){
+
     $dup = checkDuplicate($conn,$no_pc);
 
     if($dup){
         die("<script>alert('❌ ซ้ำกับ {$dup['user_employee']} ({$dup['user_project']})');history.back();</script>");
+    }
     }
 
     /* =====================================================
@@ -158,6 +159,23 @@ if(isset($_POST['save'])){
 
         insertDevice($conn,$user_employee,$site,'PC','main',$no_pc,$loginUser);
         saveHistory($conn,$user_employee,$site,$no_pc,'PC',$loginUser);
+    }
+
+    /* =====================================================
+    🔥 UPDATE IT_assets (เฉพาะมีรหัสจริง)
+    ===================================================== */
+
+    // ❌ ไม่ update ถ้าเป็น "ไม่มีรหัสอุปกรณ์"
+    if($no_pc !== 'ไม่มีรหัสอุปกรณ์'){
+
+        $conn->prepare("
+            UPDATE IT_assets
+            SET use_it = ?
+            WHERE no_pc = ?
+        ")->execute([
+            $site,     // 🔥 โครงการปัจจุบัน
+            $no_pc
+        ]);
     }
 
     /* =====================================================

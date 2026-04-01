@@ -124,7 +124,7 @@ $stmt = $conn->prepare("
 SELECT
 t.transfer_id,
 t.no_pc,
-a.type_equipment AS type,
+ISNULL(t.type, a.type_equipment) AS type,  -- 🔥 กัน null
 a.spec,a.ram,a.ssd,a.gpu,
 t.from_site,
 t.transfer_type,

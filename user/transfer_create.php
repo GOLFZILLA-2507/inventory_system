@@ -2,14 +2,18 @@
 require_once '../config/connect.php';
 require_once '../config/checklogin.php';
 
+/* =====================================================
+🔐 SESSION
+===================================================== */
 $site = $_SESSION['site'];
 $user = $_SESSION['fullname'];
 
 /* =====================================================
-🔥 โหลดโครงการปลายทาง
+📍 โหลดโครงการปลายทาง
 ===================================================== */
 $stmt = $conn->prepare("
-SELECT DISTINCT site FROM Employee
+SELECT DISTINCT site 
+FROM Employee
 WHERE site IS NOT NULL AND site <> ?
 ORDER BY site
 ");
@@ -17,7 +21,7 @@ $stmt->execute([$site]);
 $projects = $stmt->fetchAll(PDO::FETCH_COLUMN);
 
 /* =====================================================
-🔥 โหลด asset จาก IT_user_devices (ตัวใหม่)
+📦 1. โหลดอุปกรณ์ที่มีผู้ใช้
 ===================================================== */
 $stmt = $conn->prepare("
 SELECT 
@@ -29,10 +33,26 @@ LEFT JOIN IT_assets a ON a.no_pc = d.device_code
 WHERE d.user_project = ?
 ");
 $stmt->execute([$site]);
-$rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$userDevices = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 /* =====================================================
-🔥 เช็คสถานะโอน
+📦 2. โหลดอุปกรณ์ที่รับมาแล้ว (ไม่มีผู้ใช้)
+===================================================== */
+$stmt = $conn->prepare("
+SELECT DISTINCT
+t.no_pc,
+t.type,
+a.spec,a.ram,a.ssd,a.gpu
+FROM IT_AssetTransfer_Headers t
+LEFT JOIN IT_assets a ON a.no_pc = t.no_pc
+WHERE t.to_site = ?
+AND t.receive_status = 'รับแล้ว'
+");
+$stmt->execute([$site]);
+$receivedDevices = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+/* =====================================================
+🔍 เช็คสถานะโอนล่าสุด
 ===================================================== */
 function getTransferStatus($conn,$code,$site){
     $stmt = $conn->prepare("
@@ -46,18 +66,13 @@ function getTransferStatus($conn,$code,$site){
 }
 
 /* =====================================================
-🔥 filter asset
+🔥 รวมข้อมูลทั้งหมด
 ===================================================== */
 $assets = [];
 
-foreach($rows as $r){
-
+/* === มีผู้ใช้ === */
+foreach($userDevices as $r){
     $code = trim($r['device_code']);
-
-    $t = getTransferStatus($conn,$code,$site);
-
-    // ❌ ถ้ารับแล้ว = ไม่ต้องโชว์
-    if($t && $t['receive_status']=='รับแล้ว') continue;
 
     $assets[$code] = [
         'no_pc'=>$code,
@@ -66,12 +81,36 @@ foreach($rows as $r){
         'ram'=>$r['ram'],
         'ssd'=>$r['ssd'],
         'gpu'=>$r['gpu'],
-        'transfer'=>$t
+        'source'=>'user'
+    ];
+}
+
+/* === ไม่มีผู้ใช้ (รับมาแล้ว) === */
+foreach($receivedDevices as $r){
+    $code = trim($r['no_pc']);
+
+    if(isset($assets[$code])) continue;
+
+    $assets[$code] = [
+        'no_pc'=>$code,
+        'type'=>$r['type'] ?? 'UNKNOWN',
+        'spec'=>$r['spec'],
+        'ram'=>$r['ram'],
+        'ssd'=>$r['ssd'],
+        'gpu'=>$r['gpu'],
+        'source'=>'transfer'
     ];
 }
 
 /* =====================================================
-🔥 SUBMIT
+🔥 ใส่สถานะโอน
+===================================================== */
+foreach($assets as $code => $a){
+    $assets[$code]['transfer'] = getTransferStatus($conn,$code,$site);
+}
+
+/* =====================================================
+📨 SUBMIT
 ===================================================== */
 $msg=""; $status="";
 
@@ -87,11 +126,11 @@ if($_SERVER['REQUEST_METHOD']=='POST'){
     }else{
 
         try{
-
             $conn->beginTransaction();
 
             $sent_transfer = $conn->query("
-            SELECT ISNULL(MAX(sent_transfer),0)+1 FROM IT_AssetTransfer_Headers
+            SELECT ISNULL(MAX(sent_transfer),0)+1 
+            FROM IT_AssetTransfer_Headers
             ")->fetchColumn();
 
             $stmt = $conn->prepare("
@@ -104,14 +143,13 @@ if($_SERVER['REQUEST_METHOD']=='POST'){
 
                 if(!isset($assets[$aid])) continue;
 
-                $t = getTransferStatus($conn,$aid,$site);
+                $t = $assets[$aid]['transfer'];
 
                 // ❌ กันโอนซ้ำ
-                if($t && $t['receive_status']!='รับแล้ว'){
-                    throw new Exception("❌ $aid ถูกโอนไปแล้ว (ยังไม่รับ)");
+                if($t && $t['receive_status']!='รับแล้ว' && $t['receive_status']!='ยกเลิก'){
+                    throw new Exception("❌ $aid กำลังโอนไปที่ ".$t['to_site']);
                 }
 
-                // ✅ insert อย่างเดียว (ไม่ลบ)
                 $stmt->execute([
                     $sent_transfer,
                     $type,
@@ -125,12 +163,10 @@ if($_SERVER['REQUEST_METHOD']=='POST'){
             }
 
             $conn->commit();
-
             $msg="ส่งรายการสำเร็จ";
             $status="success";
 
         }catch(Exception $e){
-
             $conn->rollBack();
             $msg=$e->getMessage();
             $status="error";
@@ -155,11 +191,12 @@ if($_SERVER['REQUEST_METHOD']=='POST'){
 
 <form method="post" id="formTransfer">
 
+<!-- 🔥 TOP FORM -->
 <div class="row mb-3">
 
 <div class="col-md-4">
 <label>ประเภท</label>
-<select name="transfer_type" class="form-control">
+<select name="transfer_type" class="form-control" required>
 <option value="โอนย้าย">โอนย้าย</option>
 <option value="ส่งคืน">ส่งคืน</option>
 </select>
@@ -172,7 +209,7 @@ if($_SERVER['REQUEST_METHOD']=='POST'){
 
 <div class="col-md-4">
 <label>ไปยัง</label>
-<select name="to_site" class="form-control">
+<select name="to_site" class="form-control" required>
 <?php foreach($projects as $p): ?>
 <option><?= $p ?></option>
 <?php endforeach; ?>
@@ -181,34 +218,69 @@ if($_SERVER['REQUEST_METHOD']=='POST'){
 
 </div>
 
+<!-- 🔥 TABLE -->
 <table class="table table-bordered text-center">
 
 <tr>
 <th>#</th>
 <th>เลือก</th>
+<th>สถานะ</th>
 <th>ประเภท</th>
+<th>แหล่ง</th>
 <th>รหัส</th>
 <th>Spec</th>
 </tr>
 
-<?php $i=1; foreach($assets as $a): ?>
-<tr>
+<?php $i=1; foreach($assets as $a): 
+
+$isTransferring = ($a['transfer'] && 
+    $a['transfer']['receive_status']!='รับแล้ว' && 
+    $a['transfer']['receive_status']!='ยกเลิก');
+
+?>
+
+<tr class="<?= $isTransferring ? 'table-warning' : '' ?>">
+
 <td><?= $i++ ?></td>
 
 <td>
-<input type="checkbox" name="asset_ids[]" value="<?= $a['no_pc'] ?>">
+<input type="checkbox"
+name="asset_ids[]"
+value="<?= $a['no_pc'] ?>"
+<?= $isTransferring ? 'disabled class="locked-item" data-site="'.$a['transfer']['to_site'].'"' : '' ?>
+>
 </td>
 
-<td><?= $a['type'] ?></td>
+<td>
+<?php if($isTransferring): ?>
+    <span class="badge bg-warning">🚚 ไป <?= $a['transfer']['to_site'] ?></span>
+<?php elseif($a['transfer'] && $a['transfer']['receive_status']=='รับแล้ว'): ?>
+    <span class="badge bg-success">รับแล้ว</span>
+<?php elseif($a['transfer'] && $a['transfer']['receive_status']=='ยกเลิก'): ?>
+    <span class="badge bg-danger">ยกเลิก</span>
+<?php else: ?>
+    <span class="badge bg-secondary">ปกติ</span>
+<?php endif; ?>
+</td>
+
+<td><span class="badge bg-primary"><?= $a['type'] ?></span></td>
+
+<td>
+<?= $a['source']=='transfer'
+? '<span class="badge bg-info">ไม่มีผู้ใช้</span>'
+: '<span class="badge bg-dark">มีผู้ใช้</span>' ?>
+</td>
+
 <td><?= $a['no_pc'] ?></td>
 
 <td>
 <?= $a['spec']
 ? $a['spec']." | ".$a['ram']." | ".$a['ssd']." | ".$a['gpu']
-: '<span class="badge bg-success">ไม่มีข้อมูล</span>' ?>
+: '-' ?>
 </td>
 
 </tr>
+
 <?php endforeach; ?>
 
 </table>
@@ -224,22 +296,29 @@ if($_SERVER['REQUEST_METHOD']=='POST'){
 </div>
 
 <script>
-/* 🔥 CONFIRM */
-document.getElementById('btnConfirm').addEventListener('click',function(){
-
+// confirm
+document.getElementById('btnConfirm').onclick = function(){
 Swal.fire({
 title:'ยืนยัน?',
-text:'ต้องการโอนอุปกรณ์ใช่หรือไม่',
 icon:'question',
-showCancelButton:true,
-confirmButtonText:'ส่ง',
-cancelButtonText:'ยกเลิก'
-}).then((res)=>{
+showCancelButton:true
+}).then(res=>{
 if(res.isConfirmed){
 document.getElementById('formTransfer').submit();
 }
 });
+};
 
+// แจ้งเตือน item lock
+document.querySelectorAll('.locked-item').forEach(el=>{
+el.closest('tr').onclick=function(e){
+if(e.target.tagName==='INPUT') return;
+Swal.fire({
+icon:'warning',
+title:'ไม่สามารถเลือกได้',
+text:'กำลังโอนไปที่ '+el.dataset.site
+});
+};
 });
 </script>
 
