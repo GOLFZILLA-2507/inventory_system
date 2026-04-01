@@ -2,175 +2,135 @@
 require_once '../config/connect.php';
 require_once '../config/checklogin.php';
 
-/* =====================================================
-   ดึงโครงการของ user ที่ login
-===================================================== */
 $site = $_SESSION['site'];
+$user = $_SESSION['fullname'];
 
 /* =====================================================
-🔥 เมื่อกด "นำมาใช้"
+🔥 FUNCTION: เช็คซ้ำทั้งระบบ
 ===================================================== */
-if(isset($_POST['transfer_id'])){
-
-    $transfer_id = $_POST['transfer_id'];
-    $no_pc       = $_POST['no_pc'];
-    $type        = $_POST['type'];
-    $user        = $_SESSION['fullname'];
-
-    /* ===============================
-    🔥 map type → field
-    =============================== */
-    $map = [
-        'CCTV'=>'user_cctv',
-        'NVR'=>'user_nvr',
-        'Projector'=>'user_projector',
-        'Printer'=>'user_printer',
-        'audio_set'=>'user_audio_set',
-        'Plotter'=>'user_plotter',
-        'Accessories_IT'=>'user_Accessories_IT',
-        'Drone'=>'user_Drone',
-        'Optical_Fiber'=>'user_Optical_Fiber',
-        'Server'=>'user_Server'
-    ];
-
-    if(!isset($map[$type])){
-        die("ไม่ใช่อุปกรณ์ใช้ร่วม");
-    }
-
-    $field = $map[$type];
-
-    /* ===============================
-    🔥 หา SHARED row
-    =============================== */
+function checkDuplicate($conn,$code){
     $stmt = $conn->prepare("
-    SELECT * FROM IT_user_information
-    WHERE user_project=? AND user_type_equipment='SHARED'
+        SELECT TOP 1 user_employee,user_project
+        FROM IT_user_devices
+        WHERE device_code=?
     ");
-    $stmt->execute([$site]);
-    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    $stmt->execute([$code]);
+    return $stmt->fetch(PDO::FETCH_ASSOC);
+}
 
-    /* ===============================
-    🔥 ถ้าไม่มี → สร้าง
-    =============================== */
-    if(!$row){
-
-        $conn->prepare("
-        INSERT INTO IT_user_information
-        (user_project,user_type_equipment,user_record,user_update)
-        VALUES (?,?,?,GETDATE())
-        ")->execute([$site,'SHARED',$user]);
-
-        $stmt->execute([$site]);
-        $row = $stmt->fetch(PDO::FETCH_ASSOC);
-    }
-
-    /* ===============================
-    🔥 ต่อค่า IT_user_information
-    =============================== */
-    $old = $row[$field] ?? '';
-    $arr = !empty($old) ? explode(',', $old) : [];
-    $arr = array_map('trim',$arr);
-
-    if(!in_array($no_pc,$arr)){
-        $arr[] = $no_pc;
-    }
-
-    $new = implode(',', array_filter($arr));
+/* =====================================================
+🔥 FUNCTION: insert device (ใช้ร่วม)
+===================================================== */
+function insertShared($conn,$site,$type,$code,$user){
 
     $conn->prepare("
-    UPDATE IT_user_information
-    SET $field=?, user_employee=?, user_update=GETDATE(), user_record=?
-    WHERE id=?
-    ")->execute([$new,$site,$user,$row['id']]);
+        INSERT INTO IT_user_devices
+        (user_employee,user_project,device_type,device_role,device_code,created_by,user_record)
+        VALUES (?,?,?,?,?,?,?)
+    ")->execute([
+        $site,        // 🔥 ใช้ project เป็น owner
+        $site,
+        $type,
+        'shared',     // 🔥 role = shared
+        $code,
+        $user,
+        $user
+    ]);
+}
 
-   /* ===============================
-🔥 HISTORY NEW (1 อุปกรณ์ = 1 row)
-=============================== */
+/* =====================================================
+🔥 FUNCTION: save history
+===================================================== */
+function saveHistory($conn,$site,$code,$type,$user){
 
-// 🔥 เช็คซ้ำจาก IT_user_information (ตาม requirement)
-$checkDup = $conn->prepare("
-SELECT COUNT(*) FROM IT_user_information
-WHERE 
-    user_cctv = ?
-    OR user_nvr = ?
-    OR user_projector = ?
-    OR user_printer = ?
-    OR user_audio_set = ?
-    OR user_plotter = ?
-    OR user_Accessories_IT = ?
-    OR user_Drone = ?
-    OR user_Optical_Fiber = ?
-    OR user_Server = ?
-");
-$checkDup->execute([
-    $no_pc,$no_pc,$no_pc,$no_pc,$no_pc,
-    $no_pc,$no_pc,$no_pc,$no_pc,$no_pc
-]);
-
-    // 🔥 insert history ใหม่ (1 row ต่อ 1 อุปกรณ์)
     $conn->prepare("
-    INSERT INTO IT_user_history (
-        user_employee,
-        user_project,
-        user_no_pc,
-        history_type,
-        start_date,
-        created_at,
-        created_by,
-        action_type
-    )
-    VALUES (?,?,?, ?,GETDATE(),GETDATE(),?,?)
+        INSERT INTO IT_user_history
+        (user_employee,user_project,user_no_pc,action_type,created_at,created_by,history_type,start_date)
+        VALUES (?,?,?,'shared_assign',GETDATE(),?,?,GETDATE())
     ")->execute([
         $site,
         $site,
-        $no_pc,
-        $type,        // 🔥 ใช้ type จริงจาก assets
+        $code,
         $user,
-        'shared_assign'
+        $type
     ]);
-
-
-    /* ===============================
-    🔥 update transfer
-    =============================== */
-    $conn->prepare("
-    UPDATE IT_AssetTransfer_Headers
-    SET user_status=?
-    WHERE transfer_id=?
-    ")->execute([$site,$transfer_id]);
-
-    header("Location: asset_available.php?success=1&pc=".$no_pc);
-    exit;
 }
+
 /* =====================================================
-   โหลดอุปกรณ์ที่ยังไม่มีผู้ใช้งาน
-   👉 เงื่อนไข:
-   - มาถึงปลายทางแล้ว (receive_status = 'รับแล้ว')
-   - เป็นของโครงการนี้ (to_site)
-   - ยังไม่ถูกใช้งาน (status IS NULL)
+🔥 SUBMIT (หัวใจหลัก)
+===================================================== */
+if($_SERVER['REQUEST_METHOD']=='POST'){
+
+    $transfer_id = $_POST['transfer_id'] ?? '';
+    $no_pc       = $_POST['no_pc'] ?? '';
+    $type        = $_POST['type'] ?? '';
+
+    if(!$no_pc){
+        die("ไม่พบรหัสอุปกรณ์");
+    }
+
+    // 🔥 เช็คซ้ำก่อนทุกครั้ง
+    $dup = checkDuplicate($conn,$no_pc);
+
+    if($dup){
+        echo "<script>
+        alert('❌ อุปกรณ์ซ้ำ\\nใช้โดย {$dup['user_employee']} ({$dup['user_project']})');
+        history.back();
+        </script>";
+        exit;
+    }
+
+    /* =====================================================
+    🔥 แยกประเภท (สำคัญมาก)
+    ===================================================== */
+    $mainTypes = ['PC','Notebook','All_In_One','Monitor','UPS'];
+
+    /* =====================================================
+    🔴 CASE 1: อุปกรณ์หลัก → ไปหน้า assign user
+    ===================================================== */
+    if(in_array($type,$mainTypes)){
+
+        header("Location: asset_assign_user.php?no_pc=".$no_pc."&type=".$type."&transfer_id=".$transfer_id);
+        exit;
+    }
+
+    /* =====================================================
+    🟢 CASE 2: อุปกรณ์ใช้ร่วม → บันทึกทันที
+    ===================================================== */
+    else{
+
+        // 🔥 insert ลง IT_user_devices
+        insertShared($conn,$site,$type,$no_pc,$user);
+
+        // 🔥 บันทึก history
+        saveHistory($conn,$site,$no_pc,$type,$user);
+
+        // 🔥 update transfer
+        $conn->prepare("
+            UPDATE IT_AssetTransfer_Headers
+            SET user_status=?
+            WHERE transfer_id=?
+        ")->execute([$site,$transfer_id]);
+
+        header("Location: asset_available.php?success=1");
+        exit;
+    }
+}
+
+/* =====================================================
+🔥 โหลดรายการอุปกรณ์
 ===================================================== */
 $stmt = $conn->prepare("
 SELECT
 t.transfer_id,
 t.no_pc,
-
--- 🔥 ดึง type จริงจาก assets
 a.type_equipment AS type,
-
--- 🔥 เอารายละเอียดจริง
-a.Equipment_details AS details,
-a.spec,
-a.ram,
-a.ssd,
-a.gpu,
-
+a.spec,a.ram,a.ssd,a.gpu,
 t.from_site,
 t.transfer_type,
 t.arrived_date
 
 FROM IT_AssetTransfer_Headers t
-
--- 🔥 JOIN เพื่อเอาข้อมูล asset จริง
 LEFT JOIN IT_assets a ON a.no_pc = t.no_pc
 
 WHERE t.to_site = ?
@@ -192,134 +152,59 @@ include 'partials/sidebar.php';
 background:linear-gradient(135deg,#198754,#20c997);
 color:white;
 }
-
-.empty-data{
-display:inline-block;
-padding:4px 10px;
-font-size:12px;
-font-weight:600;
-color:#856404;
-background:#fff3cd;
-border-radius:6px;
-border:1px solid #000000;
-}
-
-.table-green thead{
-    background: linear-gradient(135deg,#198754,#20c997);
-    color:white;
-}
-
-.table-green tbody tr:hover{
-    background:#e9f7ef;
-}
-
-.badge-green{
-    background:#198754;
-}
 </style>
 
 <div class="container mt-4">
 <div class="card shadow">
 
 <div class="card-header">
-<h5 class="mb-0">
-🖥 อุปกรณ์ที่ยังไม่มีผู้ใช้งาน  
-(โครงการ <?= $site ?>)
-</h5>
+🖥 อุปกรณ์ที่ยังไม่มีผู้ใช้งาน
 </div>
 
 <div class="card-body">
 
-<table class="table table-bordered table-green">
+<table class="table table-bordered text-center">
 
-<thead class="table-success text-center">
 <tr>
-<th>ลำดับ</th>
-<th>รหัสอุปกรณ์</th>
+<th>#</th>
+<th>รหัส</th>
 <th>ประเภท</th>
 <th>Spec</th>
-<th>หมายเหตุ</th>
-<th>วันที่รับ</th>
 <th>จัดการ</th>
 </tr>
-</thead>
-
-<tbody>
-
-<?php if(empty($data)): ?>
-
-<tr>
-<td colspan="7" class="text-center text-muted">
-ไม่พบอุปกรณ์ที่ยังไม่มีผู้ใช้งาน
-</td>
-</tr>
-
-<?php else: ?>
 
 <?php $i=1; foreach($data as $d): ?>
 
 <tr>
+<td><?= $i++ ?></td>
 
-<td class="text-center"><?= $i++ ?></td>
+<td class="fw-bold text-primary"><?= $d['no_pc'] ?></td>
 
-<!-- 🔥 รหัสอุปกรณ์ -->
-<td class="fw-bold text-primary">
-<?= $d['no_pc'] ?: '<span class="empty-data">ไม่มีข้อมูล</span>' ?>
-</td>
+<td><?= $d['type'] ?></td>
 
-<!-- 🔥 ประเภท -->
-<td class="text-center">
-<?= $d['type'] ?: '-' ?>
+<td>
+<?= implode(' | ',array_filter([
+$d['spec'],$d['ram'],$d['ssd'],$d['gpu']
+])) ?: '-' ?>
 </td>
 
 <td>
-<?php
-$specParts = array_filter([
-$d['spec'],
-$d['ram'],
-$d['ssd'],
-$d['gpu']
-]);
-
-echo empty($specParts)
-? '<span class="empty-data">ไม่มีข้อมูล</span>'
-: implode(' | ', $specParts);
-?>
-</td>
-
-<!-- 🔥 หมายเหตุ -->
-<td>
-<?php if(!empty($d['from_site'])): ?>
-โอนจาก : <b><?= htmlspecialchars($d['from_site']) ?></b><br>
-ประเภท : <span class="badge bg-info"><?= htmlspecialchars($d['transfer_type']) ?></span>
-<?php else: ?>
-<span class="empty-data">ไม่มีข้อมูล</span>
-<?php endif; ?>
-</td>
-
-<!-- 🔥 วันที่ -->
-<td class="text-center">
-<?= $d['arrived_date'] ?: '-' ?>
-</td>
-
-<!-- 🔥 ปุ่มจัดการ -->
-<td class="text-center">
 
 <?php
-// 🔥 แยกประเภท
-$mainTypes = ['PC','Notebook','All_In_One','Monitor','UPS','Printer','Scanner','Projector','audio_set'];
+$mainTypes = ['PC','Notebook','All_In_One','Monitor','UPS'];
 ?>
 
-<?php if(in_array($d['type'], $mainTypes)): ?>
+<?php if(in_array($d['type'],$mainTypes)): ?>
 
 <!-- 🔴 อุปกรณ์หลัก -->
-<a href="asset_assign_user.php?transfer_id=<?= $d['transfer_id'] ?>&no_pc=<?= $d['no_pc'] ?>"
-class="btn btn-sm btn-primary">
+<a href="asset_assign_user.php?no_pc=<?= $d['no_pc'] ?>&type=<?= $d['type'] ?>&transfer_id=<?= $d['transfer_id'] ?>"
+class="btn btn-primary btn-sm">
 👤 เพิ่มผู้ใช้
 </a>
 
 <?php else: ?>
-<!-- 🟢 อุปกรณ์ร่วม -->
+
+<!-- 🟢 อุปกรณ์ใช้ร่วม -->
 <form method="post" class="d-inline">
 
 <input type="hidden" name="transfer_id" value="<?= $d['transfer_id'] ?>">
@@ -327,7 +212,7 @@ class="btn btn-sm btn-primary">
 <input type="hidden" name="type" value="<?= $d['type'] ?>">
 
 <button type="button"
-class="btn btn-sm btn-success openConfirm"
+class="btn btn-success btn-sm openConfirm"
 data-pc="<?= $d['no_pc'] ?>"
 data-type="<?= $d['type'] ?>">
 📦 นำมาใช้
@@ -338,13 +223,9 @@ data-type="<?= $d['type'] ?>">
 <?php endif; ?>
 
 </td>
-
 </tr>
 
 <?php endforeach; ?>
-<?php endif; ?>
-
-</tbody>
 
 </table>
 
@@ -352,70 +233,26 @@ data-type="<?= $d['type'] ?>">
 </div>
 </div>
 
-<!-- ✅ CONFIRM MODAL -->
-<div class="modal fade" id="confirmModal" tabindex="-1">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content shadow border-0">
+<!-- 🔥 MODAL CONFIRM -->
+<div class="modal fade" id="confirmModal">
+<div class="modal-dialog modal-dialog-centered">
+<div class="modal-content shadow">
 
-      <div class="modal-header text-white"
-           style="background:linear-gradient(135deg,#198754,#20c997)">
-        <h5 class="modal-title">ยืนยันการใช้งาน</h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-      </div>
-
-      <div class="modal-body text-center">
-
-        <div style="font-size:48px;">📦</div>
-
-        <div id="confirmText" class="mt-3"></div>
-
-      </div>
-
-      <div class="modal-footer justify-content-center">
-
-        <button class="btn btn-light" data-bs-dismiss="modal">
-          ยกเลิก
-        </button>
-
-        <button id="confirmBtn" class="btn btn-success">
-          ✔ ยืนยัน
-        </button>
-
-      </div>
-
-    </div>
-  </div>
+<div class="modal-header bg-success text-white">
+<h5>ยืนยันการใช้งาน</h5>
 </div>
 
-<!-- ✅ SUCCESS MODAL -->
-<div class="modal fade" id="successModal" tabindex="-1">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content border-0 shadow">
+<div class="modal-body text-center" id="confirmText"></div>
 
-      <div class="modal-header text-white"
-           style="background:linear-gradient(135deg,#198754,#20c997)">
-        <h5 class="modal-title">สำเร็จ</h5>
-      </div>
-
-      <div class="modal-body text-center">
-
-        <div style="font-size:48px;">✅</div>
-
-        <div id="successText" class="mt-3"></div>
-
-      </div>
-
-      <div class="modal-footer justify-content-center">
-        <button class="btn btn-success" data-bs-dismiss="modal">
-          ตกลง
-        </button>
-      </div>
-
-    </div>
-  </div>
+<div class="modal-footer">
+<button class="btn btn-secondary" data-bs-dismiss="modal">ยกเลิก</button>
+<button id="confirmBtn" class="btn btn-success">ยืนยัน</button>
 </div>
 
-<?php include 'partials/footer.php'; ?>
+</div>
+</div>
+</div>
+
 <script>
 document.querySelectorAll(".openConfirm").forEach(btn=>{
 
@@ -425,13 +262,9 @@ document.querySelectorAll(".openConfirm").forEach(btn=>{
         let pc   = this.dataset.pc;
         let type = this.dataset.type;
 
-        document.getElementById("confirmText").innerHTML = `
-            <b>ยืนยันนำอุปกรณ์ไปใช้</b><br><br>
-            <span style="color:#198754">${pc}</span><br>
-            <small>${type}</small>
-        `;
+        document.getElementById("confirmText").innerHTML =
+            `<b>${pc}</b><br>${type}`;
 
-        // 🔥 set submit
         document.getElementById("confirmBtn").onclick = function(){
             form.submit();
         };
@@ -440,18 +273,6 @@ document.querySelectorAll(".openConfirm").forEach(btn=>{
     });
 
 });
-
-<?php if(isset($_GET['success'])): ?>
-
-let pc = "<?= $_GET['pc'] ?? '' ?>";
-
-document.getElementById("successText").innerHTML = `
-    <b>นำอุปกรณ์สำเร็จ</b><br><br>
-    <span style="color:#198754">${pc}</span><br>
-    <small>ถูกเพิ่มเข้าโครงการแล้ว</small>
-`;
-
-new bootstrap.Modal(document.getElementById('successModal')).show();
-
-<?php endif; ?>
 </script>
+
+<?php include 'partials/footer.php'; ?>

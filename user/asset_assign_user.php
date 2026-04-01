@@ -2,42 +2,84 @@
 require_once '../config/connect.php';
 require_once '../config/checklogin.php';
 
-/* =========================================
-🔥 ตรวจอุปกรณ์ซ้ำทั้งระบบ
-========================================= */
-function checkDuplicateDevice($conn,$no_pc){
-
-    $stmt = $conn->prepare("
-    SELECT TOP 1 user_employee, user_project
-    FROM IT_user_information
-    WHERE 
-        user_no_pc = ?
-        OR user_monitor1 = ?
-        OR user_monitor2 = ?
-        OR user_ups = ?
-    ");
-
-    $stmt->execute([$no_pc,$no_pc,$no_pc,$no_pc]);
-
-    return $stmt->fetch(PDO::FETCH_ASSOC);
-}
-
 $site = $_SESSION['site'];
 $loginUser = $_SESSION['fullname'];
 
 /* =====================================================
-   รับ asset_id
-   - ตอนแรกมาจาก GET
-   - ตอน submit มาจาก POST
+🔥 FUNCTION: เช็คซ้ำทั้งระบบ
 ===================================================== */
-$transfer_id = $_GET['transfer_id'] ?? ($_POST['transfer_id'] ?? 0);
-$no_pc = $_GET['no_pc'] ?? ($_POST['no_pc'] ?? '');
+function checkDuplicate($conn,$code){
+    $stmt = $conn->prepare("
+        SELECT TOP 1 user_employee,user_project
+        FROM IT_user_devices
+        WHERE device_code=?
+    ");
+    $stmt->execute([$code]);
+    return $stmt->fetch(PDO::FETCH_ASSOC);
+}
 
 /* =====================================================
-   โหลดข้อมูล asset
+🔥 FUNCTION: นับจำนวนอุปกรณ์ user
+===================================================== */
+function countDevice($conn,$emp,$type){
+    $stmt = $conn->prepare("
+        SELECT COUNT(*) 
+        FROM IT_user_devices
+        WHERE user_employee=? AND device_type=?
+    ");
+    $stmt->execute([$emp,$type]);
+    return $stmt->fetchColumn();
+}
+
+/* =====================================================
+🔥 FUNCTION: insert device (1 row)
+===================================================== */
+function insertDevice($conn,$emp,$site,$type,$role,$code,$user){
+
+    $conn->prepare("
+        INSERT INTO IT_user_devices
+        (user_employee,user_project,device_type,device_role,device_code,created_by,user_record)
+        VALUES (?,?,?,?,?,?,?)
+    ")->execute([
+        $emp,
+        $site,
+        $type,
+        $role,
+        $code,
+        $user,
+        $user
+    ]);
+}
+
+/* =====================================================
+🔥 FUNCTION: save history
+===================================================== */
+function saveHistory($conn,$emp,$site,$code,$type,$user){
+
+    $conn->prepare("
+        INSERT INTO IT_user_history
+        (user_employee,user_project,user_no_pc,action_type,created_at,created_by,history_type,start_date)
+        VALUES (?,?,?,'assign_user',GETDATE(),?,?,GETDATE())
+    ")->execute([
+        $emp,
+        $site,
+        $code,
+        $user,
+        $type
+    ]);
+}
+
+/* =====================================================
+🔥 รับค่า
+===================================================== */
+$transfer_id = $_GET['transfer_id'] ?? ($_POST['transfer_id'] ?? 0);
+$no_pc       = $_GET['no_pc'] ?? ($_POST['no_pc'] ?? '');
+
+/* =====================================================
+🔥 โหลด asset
 ===================================================== */
 $stmt = $conn->prepare("
-SELECT t.*, a.*
+SELECT t.*, a.type_equipment
 FROM IT_AssetTransfer_Headers t
 LEFT JOIN IT_assets a ON a.no_pc = t.no_pc
 WHERE t.transfer_id = ?
@@ -46,202 +88,88 @@ $stmt->execute([$transfer_id]);
 $asset = $stmt->fetch(PDO::FETCH_ASSOC);
 
 /* =====================================================
-   โหลดรายชื่อ user ในโครงการเดียวกัน
+🔥 โหลด user
 ===================================================== */
 $stmt = $conn->prepare("
 SELECT fullname, position
 FROM Employee
 WHERE site = ?
 ");
-
 $stmt->execute([$site]);
 $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 /* =====================================================
-   เมื่อกดบันทึก
+🔥 SUBMIT
 ===================================================== */
 if(isset($_POST['save'])){
 
-    $transfer_id   = $_POST['transfer_id'];
-    $no_pc         = $_POST['no_pc'];
     $user_employee = $_POST['user_employee'];
+    $type = $asset['type_equipment'];
 
-    /* =====================================================
-    🔥 โหลดข้อมูล asset
-    ===================================================== */
-    $stmtA = $conn->prepare("
-    SELECT type_equipment
-    FROM IT_assets
-    WHERE no_pc=?
-    ");
-    $stmtA->execute([$no_pc]);
-    $type = $stmtA->fetchColumn();
-
-    /* =====================================================
-    🔥 โหลด user
-    ===================================================== */
-    $stmtUser = $conn->prepare("
-    SELECT position, site
-    FROM Employee
-    WHERE fullname = ?
-    ");
-    $stmtUser->execute([$user_employee]);
-    $userData = $stmtUser->fetch(PDO::FETCH_ASSOC);
-
-    if(!$userData){
-        die("ไม่พบผู้ใช้");
+    if(!$user_employee){
+        die("<script>alert('เลือกผู้ใช้');history.back();</script>");
     }
 
-    $user_project  = $userData['site'];
-
-    /* =====================================================
-    🔥 หา user แถวเดิม
-    ===================================================== */
-    $stmt = $conn->prepare("
-    SELECT * FROM IT_user_information
-    WHERE user_employee=? AND user_project=?
-    ");
-    $stmt->execute([$user_employee,$user_project]);
-    $row = $stmt->fetch(PDO::FETCH_ASSOC);
-
-
-        /* =====================================================
-    🔥 CHECK DUPLICATE (กันซ้ำทั้งระบบ)
-    ===================================================== */
-
-    $dup = checkDuplicateDevice($conn,$no_pc);
+    /* ===============================
+    🔥 CHECK DUPLICATE
+    =============================== */
+    $dup = checkDuplicate($conn,$no_pc);
 
     if($dup){
-        echo "<script>alert('❌ อุปกรณ์นี้ถูกใช้งานแล้ว\n\nรหัส: $no_pc\nผู้ใช้: {$dup['user_employee']}\nโครงการ: {$dup['user_project']}');history.back();</script>";
-        exit;
+        die("<script>alert('❌ ซ้ำกับ {$dup['user_employee']} ({$dup['user_project']})');history.back();</script>");
     }
 
     /* =====================================================
-    🔥 TYPE LOGIC
+    🔥 TYPE LOGIC (หัวใจ)
     ===================================================== */
 
+    // 🟡 MONITOR
     if($type == 'Monitor'){
 
-        if($row){
+        $count = countDevice($conn,$user_employee,'Monitor');
 
-            if(empty($row['user_monitor1'])){
-                $conn->prepare("
-                UPDATE IT_user_information
-                SET user_monitor1=?, user_update=GETDATE()
-                WHERE id=?
-                ")->execute([$no_pc,$row['id']]);
-
-            }elseif(empty($row['user_monitor2'])){
-                $conn->prepare("
-                UPDATE IT_user_information
-                SET user_monitor2=?, user_update=GETDATE()
-                WHERE id=?
-                ")->execute([$no_pc,$row['id']]);
-
-            }else{
-                die("<script>alert('ผู้ใช้นี้มีจอครบแล้ว');history.back();</script>");
-            }
-
-        }else{
-
-            $conn->prepare("
-            INSERT INTO IT_user_information
-            (user_employee,user_project,user_monitor1,user_record,user_update)
-            VALUES (?,?,?,?,GETDATE())
-            ")->execute([
-                $user_employee,
-                $user_project,
-                $no_pc,
-                $loginUser
-            ]);
+        if($count >= 2){
+            die("<script>alert('❌ จอครบแล้ว (2 จอ)');history.back();</script>");
         }
 
-    }elseif($type == 'UPS'){
+        $role = ($count == 0) ? 'monitor1' : 'monitor2';
 
-        if($row && !empty($row['user_ups'])){
-            die("<script>alert('มี UPS อยู่แล้ว');history.back();</script>");
-        }
-
-        if($row){
-            $conn->prepare("
-            UPDATE IT_user_information
-            SET user_ups=?, user_update=GETDATE()
-            WHERE id=?
-            ")->execute([$no_pc,$row['id']]);
-        }else{
-            $conn->prepare("
-            INSERT INTO IT_user_information
-            (user_employee,user_project,user_ups,user_record,user_update)
-            VALUES (?,?,?,?,GETDATE())
-            ")->execute([
-                $user_employee,
-                $user_project,
-                $no_pc,
-                $loginUser
-            ]);
-        }
-
-    }else{ // PC / Notebook
-
-        if($row && !empty($row['user_no_pc'])){
-            die("<script>alert('มีเครื่องใช้อยู่แล้ว');history.back();</script>");
-        }
-
-        if($row){
-            $conn->prepare("
-            UPDATE IT_user_information
-            SET user_no_pc=?, user_update=GETDATE()
-            WHERE id=?
-            ")->execute([$no_pc,$row['id']]);
-        }else{
-            $conn->prepare("
-            INSERT INTO IT_user_information
-            (user_employee,user_project,user_no_pc,user_record,user_update)
-            VALUES (?,?,?,?,GETDATE())
-            ")->execute([
-                $user_employee,
-                $user_project,
-                $no_pc,
-                $loginUser
-            ]);
-        }
+        insertDevice($conn,$user_employee,$site,'Monitor',$role,$no_pc,$loginUser);
+        saveHistory($conn,$user_employee,$site,$no_pc,'Monitor',$loginUser);
     }
 
-        /* =====================================================
-        🔥 HISTORY NEW (1 อุปกรณ์ = 1 row + เก็บ type)
-        ===================================================== */
+    // 🟣 UPS
+    elseif($type == 'UPS'){
 
-        $conn->prepare("
-        INSERT INTO IT_user_history (
-            user_employee,
-            user_project,
-            user_no_pc,
-            history_type,
-            start_date,
-            created_at,
-            created_by,
-            action_type
-        )
-        VALUES (?,?,?, ?,GETDATE(),GETDATE(),?,?)
-        ")->execute([
-            $user_employee,
-            $user_project,
-            $no_pc,
-            $type,          // 🔥 ประเภทอุปกรณ์ (สำคัญมาก)
-            $loginUser,
-            'assign_user'   // 🔥 action ไว้แยกเหตุการณ์
-        ]);
+        if(countDevice($conn,$user_employee,'UPS') > 0){
+            die("<script>alert('❌ มี UPS แล้ว');history.back();</script>");
+        }
+
+        insertDevice($conn,$user_employee,$site,'UPS','ups',$no_pc,$loginUser);
+        saveHistory($conn,$user_employee,$site,$no_pc,'UPS',$loginUser);
+    }
+
+    // 🔵 PC / Notebook
+    else{
+
+        if(countDevice($conn,$user_employee,'PC') > 0){
+            die("<script>alert('❌ มีเครื่องแล้ว');history.back();</script>");
+        }
+
+        insertDevice($conn,$user_employee,$site,'PC','main',$no_pc,$loginUser);
+        saveHistory($conn,$user_employee,$site,$no_pc,'PC',$loginUser);
+    }
 
     /* =====================================================
     🔥 UPDATE TRANSFER
     ===================================================== */
     $conn->prepare("
-    UPDATE IT_AssetTransfer_Headers
-    SET user_status=?
-    WHERE transfer_id=?
+        UPDATE IT_AssetTransfer_Headers
+        SET user_status=?
+        WHERE transfer_id=?
     ")->execute([$user_employee,$transfer_id]);
 
-    header("Location: asset_available.php");
+    header("Location: asset_available.php?success=1");
     exit;
 }
 ?>
@@ -260,29 +188,23 @@ if(isset($_POST['save'])){
 
 <form method="post" id="mainForm">
 
-<!-- =====================================================
-     ส่ง asset_id ไปตอน submit (สำคัญมาก)
-===================================================== -->
 <input type="hidden" name="transfer_id" value="<?= $transfer_id ?>">
 <input type="hidden" name="no_pc" value="<?= $no_pc ?>">
 
 <div class="mb-3">
 <label>รหัสอุปกรณ์</label>
-<input class="form-control" value="<?= $asset['no_pc'] ?>" readonly>
+<input class="form-control" value="<?= $no_pc ?>" readonly>
 </div>
 
 <div class="mb-3">
 <label>เลือกผู้ใช้งาน</label>
 <select name="user_employee" class="form-control" required>
-
 <option value="">-- เลือกผู้ใช้ --</option>
-
 <?php foreach($users as $u): ?>
-<option value="<?= htmlspecialchars($u['fullname']) ?>">
-<?= htmlspecialchars($u['fullname']) ?>
+<option value="<?= $u['fullname'] ?>">
+<?= $u['fullname'] ?>
 </option>
 <?php endforeach; ?>
-
 </select>
 </div>
 
@@ -300,51 +222,34 @@ if(isset($_POST['save'])){
 </div>
 </div>
 
+<!-- 🔥 MODAL CONFIRM -->
 <div class="modal fade" id="confirmModal">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
+<div class="modal-dialog modal-dialog-centered">
+<div class="modal-content">
 
-      <div class="modal-header bg-success text-white">
-        <h5>ยืนยัน</h5>
-      </div>
-
-      <div class="modal-body text-center">
-        ต้องการเพิ่มอุปกรณ์นี้ใช่หรือไม่?
-      </div>
-
-      <div class="modal-footer">
-        <button class="btn btn-light" data-bs-dismiss="modal">ยกเลิก</button>
-        <button type="submit" name="save" form="mainForm" class="btn btn-success">
-            ยืนยัน
-        </button>
-      </div>
-
-    </div>
-  </div>
+<div class="modal-header bg-success text-white">
+<h5>ยืนยัน</h5>
 </div>
 
-<div class="modal fade" id="successModal">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content text-center p-4">
-        <h4>สำเร็จ</h4>
-        <p id="successText"></p>
-    </div>
-  </div>
+<div class="modal-body text-center">
+ต้องการบันทึกใช่หรือไม่
 </div>
 
-<?php include 'partials/footer.php'; ?>
+<div class="modal-footer">
+<button class="btn btn-secondary" data-bs-dismiss="modal">ยกเลิก</button>
+<button type="submit" name="save" form="mainForm" class="btn btn-success">
+ยืนยัน
+</button>
+</div>
+
+</div>
+</div>
+</div>
 
 <script>
 document.getElementById("openConfirm").onclick = function(){
     new bootstrap.Modal(document.getElementById('confirmModal')).show();
 };
-
-<?php if(isset($_GET['success'])): ?>
-
-document.getElementById("successText").innerHTML =
-"เพิ่ม <?= $_GET['pc'] ?> สำเร็จ";
-
-new bootstrap.Modal(document.getElementById('successModal')).show();
-
-<?php endif; ?>
 </script>
+
+<?php include 'partials/footer.php'; ?>

@@ -2,159 +2,103 @@
 require_once '../config/connect.php';
 require_once '../config/checklogin.php';
 
-$site = $_SESSION['site'];       // 🔥 โครงการ
-$user = $_SESSION['fullname'];   // 🔥 คนบันทึก
+$site = $_SESSION['site'];       // โครงการ
+$user = $_SESSION['fullname'];   // ผู้บันทึก
 
-/* =========================================
-🔥 mapping field ตามประเภท
-========================================= */
-$fieldMap = [
-    'CCTV'            => 'user_cctv',
-    'NVR'             => 'user_nvr',
-    'Printer'         => 'user_printer',
-    'Projector'       => 'user_projector',
-    'Server'          => 'user_Server',
-    'Audio'           => 'user_audio_set',
-    'Plotter'         => 'user_plotter',
-    'Accessories_IT'  => 'user_Accessories_IT',
-    'Drone'           => 'user_Drone',
-    'Optical_Fiber'   => 'user_Optical_Fiber'
+/* =====================================================
+🔥 ประเภทที่ใช้ร่วม
+===================================================== */
+$types = [
+    'CCTV','NVR','Printer','Projector','Server',
+    'Audio','Plotter','Accessories_IT','Drone','Optical_Fiber'
 ];
 
-/* =========================================
+/* =====================================================
+🔥 FUNCTION: insert device (shared)
+===================================================== */
+function insertDevice($conn,$site,$type,$code,$user){
+    $conn->prepare("
+        INSERT INTO IT_user_devices
+        (user_employee,user_project,device_type,device_role,device_code,created_by,user_record)
+        VALUES (?,?,?,?,?,?,?)
+    ")->execute([
+        $site,      // shared = project
+        $site,
+        $type,
+        'shared',
+        $code,
+        $user,
+        $user
+    ]);
+}
+
+/* =====================================================
+🔥 FUNCTION: save history
+===================================================== */
+function saveHistory($conn,$site,$code,$type,$user){
+    $conn->prepare("
+        INSERT INTO IT_user_history
+        (user_employee,user_project,user_no_pc,action_type,created_at,created_by,history_type,start_date)
+        VALUES (?,?,?,'shared_assign',GETDATE(),?,?,GETDATE())
+    ")->execute([
+        $site,
+        $site,
+        $code,
+        $user,
+        $type
+    ]);
+}
+
+/* =====================================================
 🔥 SUBMIT
-========================================= */
-if(isset($_POST['submit'])){
+===================================================== */
+$msg = "";
+$status = "";
 
-    $type = $_POST['type'] ?? null;
-    $name = "อุปกรณ์ไม่มีรหัส";
+if($_SERVER['REQUEST_METHOD']=='POST'){
 
-    if(empty($type) || !isset($fieldMap[$type])){
-        echo "<script>alert('เลือกประเภทไม่ถูกต้อง');history.back();</script>";
-        exit;
+    $type = $_POST['type'] ?? '';
+    $code = "อุปกรณ์ไม่มีรหัส";
+
+    if(!$type || !in_array($type,$types)){
+        $msg = "ประเภทไม่ถูกต้อง";
+        $status = "error";
     }
-
-    $field = $fieldMap[$type];
 
     try{
 
-        $conn->beginTransaction();
+        if(!$msg){
 
-        /* =========================================
-        🔥 หา row ของโครงการ
-        ========================================= */
-        $stmt = $conn->prepare("
-            SELECT TOP 1 *
-            FROM IT_user_information
-            WHERE user_project=? AND user_type_equipment='SHARED'
-            ORDER BY id ASC
-            ");
-        $stmt->execute([$site]);
-        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            $conn->beginTransaction();
 
-        /* =========================================
-        🔥 ถ้าไม่มี → สร้างใหม่
-        ========================================= */
-        if(!$row){
+            // 🔥 insert (ไม่มีเช็คซ้ำ)
+            insertDevice($conn,$site,$type,$code,$user);
 
-            $conn->prepare("
-            INSERT INTO IT_user_information(
-                user_employee,
-                user_project,
-                user_type_equipment,
-                user_update,
-                user_record
-            )
-            VALUES(?,?, 'SHARED', GETDATE(),?)
-            ")->execute([
-                $site,
-                $site,
-                $user
-            ]);
+            // 🔥 history
+            saveHistory($conn,$site,$code,$type,$user);
 
-            $row = [
-                'id'=>$conn->lastInsertId()
-            ];
+            $conn->commit();
+
+            $msg = "เพิ่มอุปกรณ์ใช้ร่วมสำเร็จ";
+            $status = "success";
         }
-
-        /* =========================================
-        🔥 ดึงค่าเดิม
-        ========================================= */
-        $check = $conn->prepare("
-        SELECT $field FROM IT_user_information WHERE id=?
-        ");
-        $check->execute([$row['id']]);
-        $oldValue = $check->fetchColumn();
-
-        /* 🔥 แปลง NULL → '' */
-        $oldValue = $oldValue ?? '';
-
-        if(trim($oldValue) !== ''){
-            $newValue = $oldValue . ", " . $name;
-        }else{
-            $newValue = $name;
-        }
-
-        /* =========================================
-        🔥 UPDATE ลง field
-        ========================================= */
-        $conn->prepare("
-        UPDATE IT_user_information
-        SET $field=?, user_update=GETDATE()
-        WHERE id=?
-        ")->execute([$newValue,$row['id']]);
-
-        /* =========================================
-        🔥 INSERT HISTORY (1 device = 1 row)
-        ========================================= */
-        $stmt = $conn->prepare("
-        INSERT INTO IT_user_history (
-            asset_id,
-            user_employee,
-            user_project,
-            user_no_pc,
-            action_type,
-            reference_id,
-            created_at,
-            created_by,
-            history_type,
-            start_date
-        )
-        VALUES (
-            NULL,
-            ?,?,?, 'shared_assign',
-            NULL,
-            GETDATE(),
-            ?,
-            ?,
-            GETDATE()
-        )
-        ");
-
-        $stmt->execute([
-            $site,     // 🔥 เอาโครงการลง
-            $site,
-            $name,
-            $user,
-            $type
-        ]);
-
-        $conn->commit();
-
-        echo "<script>alert('บันทึกสำเร็จ');location.href='asset_shared_view.php';</script>";
-        exit;
 
     }catch(Exception $e){
 
-        $conn->rollBack();
-        echo "<script>alert('❌ ".$e->getMessage()."');history.back();</script>";
-        exit;
+        if($conn->inTransaction()){
+            $conn->rollBack();
+        }
+
+        $msg = $e->getMessage();
+        $status = "error";
     }
 }
 ?>
 
 <?php include 'partials/header.php'; ?>
 <?php include 'partials/sidebar.php'; ?>
+
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
 <div class="container mt-4">
 <div class="card shadow">
@@ -165,21 +109,21 @@ if(isset($_POST['submit'])){
 
 <div class="card-body">
 
-<form method="post">
+<form method="post" id="mainForm">
 
-<!-- 🔥 แสดงโครงการ -->
+<!-- 🔥 โครงการ -->
 <div class="mb-3">
 <label>โครงการ</label>
 <input class="form-control" value="<?= $site ?>" readonly>
 </div>
 
-<!-- 🔥 เลือกประเภท -->
+<!-- 🔥 ประเภท -->
 <div class="mb-3">
 <label>ประเภทอุปกรณ์</label>
 <select name="type" class="form-control" required>
 <option value="">-- เลือกประเภท --</option>
-<?php foreach($fieldMap as $k=>$v): ?>
-<option value="<?= $k ?>"><?= $k ?></option>
+<?php foreach($types as $t): ?>
+<option><?= $t ?></option>
 <?php endforeach; ?>
 </select>
 </div>
@@ -189,7 +133,9 @@ if(isset($_POST['submit'])){
 </div>
 
 <div class="text-end">
-<button class="btn btn-success" name="submit">💾 บันทึก</button>
+<button type="button" id="btnConfirm" class="btn btn-success">
+💾 บันทึก
+</button>
 </div>
 
 </form>
@@ -197,5 +143,48 @@ if(isset($_POST['submit'])){
 </div>
 </div>
 </div>
+
+<!-- =====================================================
+🔥 MODAL CONFIRM
+===================================================== -->
+<script>
+document.getElementById('btnConfirm').addEventListener('click', function(){
+
+    Swal.fire({
+        title: 'ยืนยัน?',
+        text: 'ต้องการเพิ่มอุปกรณ์ใช้ร่วมใช่หรือไม่',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: '💾 บันทึก',
+        cancelButtonText: '❌ ยกเลิก',
+        confirmButtonColor: '#198754',
+        cancelButtonColor: '#dc3545'
+    }).then((result)=>{
+        if(result.isConfirmed){
+            document.getElementById('mainForm').submit();
+        }
+    });
+
+});
+</script>
+
+<!-- =====================================================
+🔥 RESULT MODAL
+===================================================== -->
+<?php if($msg): ?>
+<script>
+window.onload = function(){
+Swal.fire({
+    icon:'<?= $status ?>',
+    title:'<?= $status == "success" ? "สำเร็จ" : "ผิดพลาด" ?>',
+    text:'<?= $msg ?>'
+}).then(()=>{
+    <?php if($status == "success"): ?>
+    window.location='asset_shared_view.php';
+    <?php endif; ?>
+});
+}
+</script>
+<?php endif; ?>
 
 <?php include 'partials/footer.php'; ?>

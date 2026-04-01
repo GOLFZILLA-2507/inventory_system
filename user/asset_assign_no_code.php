@@ -5,9 +5,9 @@ require_once '../config/checklogin.php';
 $site = $_SESSION['site'];
 $user = $_SESSION['fullname'];
 
-/* =========================================
+/* =====================================================
 🔥 โหลดพนักงาน
-========================================= */
+===================================================== */
 $employees = $conn->prepare("
 SELECT fullname FROM Employee
 WHERE site = ?
@@ -16,148 +16,145 @@ ORDER BY fullname
 $employees->execute([$site]);
 $employees = $employees->fetchAll(PDO::FETCH_ASSOC);
 
-/* =========================================
-🔥 โหลดประเภทจาก IT_assets
-========================================= */
-$types = $conn->query("
-SELECT DISTINCT type_equipment 
-FROM IT_assets
-WHERE type_equipment IN ('PC','Notebook','All_In_One','Monitor','UPS')
-ORDER BY type_equipment
-")->fetchAll(PDO::FETCH_COLUMN);
+/* =====================================================
+🔥 ประเภทที่อนุญาต
+===================================================== */
+$types = ['PC','Notebook','All_In_One','Monitor','UPS'];
 
-/* =========================================
+/* =====================================================
+🔥 FUNCTION: นับจำนวนอุปกรณ์ของ user
+===================================================== */
+function countDevice($conn,$emp,$type){
+    $stmt = $conn->prepare("
+    SELECT COUNT(*) FROM IT_user_devices
+    WHERE user_employee=? AND device_type=?
+    ");
+    $stmt->execute([$emp,$type]);
+    return $stmt->fetchColumn();
+}
+
+/* =====================================================
+🔥 FUNCTION: insert device (1 row)
+===================================================== */
+function insertDevice($conn,$emp,$site,$type,$role,$code,$user){
+    $conn->prepare("
+    INSERT INTO IT_user_devices
+    (user_employee,user_project,device_type,device_role,device_code,created_by,user_record)
+    VALUES (?,?,?,?,?,?,?)
+    ")->execute([
+        $emp,
+        $site,
+        $type,
+        $role,
+        $code,
+        $user,
+        $user
+    ]);
+}
+
+/* =====================================================
+🔥 FUNCTION: save history
+===================================================== */
+function saveHistory($conn,$emp,$site,$code,$type,$user){
+    $conn->prepare("
+    INSERT INTO IT_user_history
+    (user_employee,user_project,user_no_pc,action_type,created_at,created_by,history_type,start_date)
+    VALUES (?,?,?,'assign_no_code',GETDATE(),?,?,GETDATE())
+    ")->execute([
+        $emp,
+        $site,
+        $code,
+        $user,
+        $type
+    ]);
+}
+
+/* =====================================================
 🔥 SUBMIT
-========================================= */
-if(isset($_POST['submit'])){
+===================================================== */
+$msg = "";
+$status = "";
 
+if($_SERVER['REQUEST_METHOD']=='POST'){
 
-    $emp   = $_POST['employee'];
-    $type  = $_POST['type'];
+    $emp  = $_POST['employee'] ?? '';
+    $type = $_POST['type'] ?? '';
 
-    // 🔥 fix ชื่อ
-    $name  = "ไม่มีรหัสอุปกรณ์";
+    // 🔥 ใช้ชื่อคงที่
+    $code = "ไม่มีรหัสอุปกรณ์";
 
-    if(empty($emp) || empty($type)){
-        echo "<script>alert('กรอกข้อมูลให้ครบ');history.back();</script>";
-        exit;
+    if(!$emp || !$type){
+        $msg = "กรุณาเลือกข้อมูลให้ครบ";
+        $status = "error";
     }
 
     try{
 
-        $conn->beginTransaction();
+        if(!$msg){
 
-        /* ================= หา user ================= */
-        $stmt = $conn->prepare("
-        SELECT * FROM IT_user_information
-        WHERE user_employee=? AND user_project=?
-        ");
-        $stmt->execute([$emp,$site]);
-        $u = $stmt->fetch(PDO::FETCH_ASSOC);
+            $conn->beginTransaction();
 
-        if(!$u){
-            $conn->prepare("
-            INSERT INTO IT_user_information(user_employee,user_project,user_update)
-            VALUES(?,?,GETDATE())
-            ")->execute([$emp,$site]);
+            /* ===============================
+            🔵 เครื่องหลัก
+            =============================== */
+            if(in_array($type,['PC','Notebook','All_In_One'])){
 
-            $u = [
-                'id'=>$conn->lastInsertId(),
-                'user_no_pc'=>null,
-                'user_monitor1'=>null,
-                'user_monitor2'=>null,
-                'user_ups'=>null
-            ];
-        }
+                if(countDevice($conn,$emp,'PC') > 0){
+                    throw new Exception("มีเครื่องหลักอยู่แล้ว");
+                }
 
-        /* =========================================
-        🔥 แยก logic ตามประเภท
-        ========================================= */
-
-        // 🔵 กลุ่มเครื่องหลัก
-        if(in_array($type,['PC','Notebook','All_In_One'])){
-
-            if(!empty($u['user_no_pc'])){
-                throw new Exception("ผู้ใช้นี้มีเครื่องหลักแล้ว");
+                insertDevice($conn,$emp,$site,'PC','main',$code,$user);
+                saveHistory($conn,$emp,$site,$code,'PC',$user);
             }
 
-            $conn->prepare("
-            UPDATE IT_user_information SET user_no_pc=? WHERE id=?
-            ")->execute([$name,$u['id']]);
-        }
+            /* ===============================
+            🟡 Monitor
+            =============================== */
+            elseif($type == 'Monitor'){
 
-        // 🟡 Monitor
-        elseif($type == 'Monitor'){
+                $count = countDevice($conn,$emp,'Monitor');
 
-            if(empty($u['user_monitor1'])){
-                $conn->prepare("
-                UPDATE IT_user_information SET user_monitor1=? WHERE id=?
-                ")->execute([$name,$u['id']]);
+                if($count >= 2){
+                    throw new Exception("จอครบแล้ว (2 จอ)");
+                }
 
-            }elseif(empty($u['user_monitor2'])){
-                $conn->prepare("
-                UPDATE IT_user_information SET user_monitor2=? WHERE id=?
-                ")->execute([$name,$u['id']]);
+                $role = ($count == 0) ? 'monitor1' : 'monitor2';
 
-            }else{
-                throw new Exception("จอเต็มแล้ว (2 จอ)");
-            }
-        }
-
-        // 🟣 UPS
-        elseif($type == 'UPS'){
-
-            if(!empty($u['user_ups'])){
-                throw new Exception("มี UPS แล้ว");
+                insertDevice($conn,$emp,$site,'Monitor',$role,$code,$user);
+                saveHistory($conn,$emp,$site,$code,'Monitor',$user);
             }
 
-            $conn->prepare("
-            UPDATE IT_user_information SET user_ups=? WHERE id=?
-            ")->execute([$name,$u['id']]);
+            /* ===============================
+            🟣 UPS
+            =============================== */
+            elseif($type == 'UPS'){
+
+                if(countDevice($conn,$emp,'UPS') > 0){
+                    throw new Exception("มี UPS แล้ว");
+                }
+
+                insertDevice($conn,$emp,$site,'UPS','ups',$code,$user);
+                saveHistory($conn,$emp,$site,$code,'UPS',$user);
+            }
+
+            else{
+                throw new Exception("ประเภทนี้ไม่รองรับ");
+            }
+
+            $conn->commit();
+
+            $msg = "บันทึกสำเร็จ";
+            $status = "success";
         }
-
-        // 🔴 อื่นๆ ไม่อนุญาต
-        else{
-            throw new Exception("ประเภทนี้ใช้หน้านี้ไม่ได้");
-        }
-
-        /* =========================================
-        🔥 INSERT HISTORY
-        ========================================= */
-
-        $stmt = $conn->prepare("
-        INSERT INTO IT_user_history (
-            user_employee,
-            user_project,
-            user_no_pc,
-            history_type,
-            start_date,
-            created_at,
-            created_by,
-            action_type
-        )
-        VALUES (?,?,?, ?,GETDATE(),GETDATE(),?,?)
-        ");
-
-        $stmt->execute([
-            $emp,
-            $site,
-            $name,
-            $type,
-            $user,
-            'assign'
-        ]);
-
-        $conn->commit();
-
-        echo "<script>alert('บันทึกสำเร็จ');location.href='asset_shared_view.php';</script>";
-        exit;
 
     }catch(Exception $e){
 
-        $conn->rollBack();
-        echo "<script>alert('❌ ".$e->getMessage()."');history.back();</script>";
-        exit;
+        if($conn->inTransaction()){
+            $conn->rollBack();
+        }
+
+        $msg = $e->getMessage();
+        $status = "error";
     }
 }
 ?>
@@ -165,23 +162,24 @@ if(isset($_POST['submit'])){
 <?php include 'partials/header.php'; ?>
 <?php include 'partials/sidebar.php'; ?>
 
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
 <div class="container mt-4">
 <div class="card shadow">
+
 <div class="card-header bg-success text-white">
 เพิ่มอุปกรณ์ (ไม่มีรหัส)
 </div>
 
 <div class="card-body">
 
-<form method="post">
+<form method="post" id="mainForm">
 
 <label>พนักงาน</label>
 <select name="employee" class="form-control mb-3" required>
 <option value="">-- เลือกพนักงาน --</option>
 <?php foreach($employees as $e): ?>
-<option value="<?= $e['fullname'] ?>">
-<?= $e['fullname'] ?>
-</option>
+<option value="<?= $e['fullname'] ?>"><?= $e['fullname'] ?></option>
 <?php endforeach; ?>
 </select>
 
@@ -198,7 +196,9 @@ if(isset($_POST['submit'])){
 </div>
 
 <div class="text-end">
-<button class="btn btn-success" name="submit">💾 บันทึก</button>
+<button type="button" id="btnConfirm" class="btn btn-success">
+💾 บันทึก
+</button>
 </div>
 
 </form>
@@ -206,5 +206,48 @@ if(isset($_POST['submit'])){
 </div>
 </div>
 </div>
+
+<!-- =====================================================
+🔥 CONFIRM MODAL
+===================================================== -->
+<script>
+document.getElementById('btnConfirm').addEventListener('click', function(){
+
+    Swal.fire({
+        title: 'ยืนยัน?',
+        text: 'ต้องการเพิ่มอุปกรณ์นี้ใช่หรือไม่',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: '💾 บันทึก',
+        cancelButtonText: '❌ ยกเลิก',
+        confirmButtonColor: '#198754',
+        cancelButtonColor: '#dc3545'
+    }).then((result)=>{
+        if(result.isConfirmed){
+            document.getElementById('mainForm').submit();
+        }
+    });
+
+});
+</script>
+
+<!-- =====================================================
+🔥 RESULT MODAL
+===================================================== -->
+<?php if($msg): ?>
+<script>
+window.onload = function(){
+Swal.fire({
+    icon:'<?= $status ?>',
+    title:'<?= $status == "success" ? "สำเร็จ" : "ผิดพลาด" ?>',
+    text:'<?= $msg ?>'
+}).then(()=>{
+    <?php if($status == "success"): ?>
+    window.location='asset_shared_view.php';
+    <?php endif; ?>
+});
+}
+</script>
+<?php endif; ?>
 
 <?php include 'partials/footer.php'; ?>

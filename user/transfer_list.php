@@ -2,17 +2,12 @@
 require_once '../config/connect.php';
 require_once '../config/checklogin.php';
 
-/* =====================================================
-🔥 ดึงโครงการของ user
-===================================================== */
 $site = $_SESSION['site'];
 
-
 /* =====================================================
-🔥 ยกเลิกรายการ (ทั้งรอบ)
+🔥 CANCEL
 ===================================================== */
 if(isset($_GET['cancel'])){
-
     $round = $_GET['cancel'];
 
     $stmt = $conn->prepare("
@@ -21,16 +16,14 @@ if(isset($_GET['cancel'])){
     WHERE sent_transfer = ?
     AND from_site = ?
     ");
-
     $stmt->execute([$round,$site]);
 
     header("Location: transfer_list.php");
     exit;
 }
 
-
 /* =====================================================
-🔥 โหลดรายการ (ตัดที่ยกเลิกแล้วออก)
+🔥 LOAD DATA
 ===================================================== */
 $stmt = $conn->prepare("
 SELECT 
@@ -40,63 +33,95 @@ to_site,
 transfer_type,
 
 FORMAT(MIN(transfer_date),'yyyy-MM-dd HH:mm') AS transfer_date,
-FORMAT(MAX(arrived_date),'yyyy-MM-dd HH:mm') AS arrived_date,
 
 COUNT(*) AS total_items,
 
 SUM(CASE WHEN receive_status='รับแล้ว' THEN 1 ELSE 0 END) AS received_items,
-
-SUM(CASE WHEN receive_status='ไม่พบอุปกรณ์นี้' THEN 1 ELSE 0 END) AS missing_items,
-
 SUM(CASE WHEN receive_status IS NULL THEN 1 ELSE 0 END) AS waiting_items
 
 FROM IT_AssetTransfer_Headers
-
 WHERE from_site = ?
 AND receive_status != 'ยกเลิก'
-
-GROUP BY 
-sent_transfer,
-from_site,
-to_site,
-transfer_type
-
+GROUP BY sent_transfer,from_site,to_site,transfer_type
 ORDER BY sent_transfer DESC
 ");
-
 $stmt->execute([$site]);
-$data=$stmt->fetchAll(PDO::FETCH_ASSOC);
+$data = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+/* =====================================================
+🔥 DASHBOARD
+===================================================== */
+$total = count($data);
+$done = 0;
+$waiting = 0;
+
+foreach($data as $d){
+    if($d['received_items'] == $d['total_items']) $done++;
+    else $waiting++;
+}
 
 include 'partials/header.php';
 include 'partials/sidebar.php';
 ?>
 
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
 <style>
-/* =====================================================
-🔥 ธีมเขียว
-===================================================== */
 .card-header{
-    background:linear-gradient(135deg,#198754,#20c997);
-    color:white;
+background:linear-gradient(135deg,#198754,#20c997);
+color:white;
 }
 
-.badge-round{
-    background:#198754;
-    color:white;
+.stat-card{
+border-radius:12px;
+padding:15px;
+color:white;
+text-align:center;
 }
 
-.btn-green{
-    background:#198754;
-    color:white;
+.bg-green{ background:#198754; }
+.bg-blue{ background:#0d6efd; }
+.bg-orange{ background:#ffc107; color:#000; }
+
+.table-hover tbody tr:hover{
+background:#f1fdf6;
 }
 
-.btn-green:hover{
-    background:#157347;
+.badge-status{
+padding:6px 10px;
+font-size:12px;
 }
 </style>
 
 <div class="container mt-4">
 
+<!-- ================= DASHBOARD ================= -->
+<div class="row mb-3">
+
+<div class="col-md-4">
+<div class="stat-card bg-blue">
+<h6>ทั้งหมด</h6>
+<h3><?= $total ?></h3>
+</div>
+</div>
+
+<div class="col-md-4">
+<div class="stat-card bg-green">
+<h6>เสร็จแล้ว</h6>
+<h3><?= $done ?></h3>
+</div>
+</div>
+
+<div class="col-md-4">
+<div class="stat-card bg-orange">
+<h6>รอดำเนินการ</h6>
+<h3><?= $waiting ?></h3>
+</div>
+</div>
+
+</div>
+
+<!-- ================= TABLE ================= -->
 <div class="card shadow">
 
 <div class="card-header">
@@ -105,21 +130,23 @@ include 'partials/sidebar.php';
 
 <div class="card-body">
 
-<table class="table table-bordered table-hover">
+<table class="table table-bordered table-hover text-center align-middle">
 
+<thead class="table-success">
 <tr>
 <th>#</th>
-<th>จาก</th>
 <th>ปลายทาง</th>
 <th>ประเภท</th>
 <th>จำนวน</th>
 <th>วันที่ส่ง</th>
-<th>วันที่รับ</th>
 <th>สถานะ</th>
-<th>Print</th>
-<th>จัดการ</th>
-<th>ตรวจเช็ค</th>
+<th>ปริ้น</th>
+<th>เช็ค</th>
+<th>ยกเลิก</th>
 </tr>
+</thead>
+
+<tbody>
 
 <?php $i=1; foreach($data as $d): ?>
 
@@ -127,83 +154,98 @@ include 'partials/sidebar.php';
 
 <td><?= $i++ ?></td>
 
-<td><?= htmlspecialchars($d['from_site']) ?></td>
-
 <td>
-<?= htmlspecialchars($d['to_site']) ?>
+<b><?= $d['to_site'] ?></b>
 </td>
 
-<td><?= htmlspecialchars($d['transfer_type']) ?></td>
+<td><?= $d['transfer_type'] ?></td>
 
 <td>
-<span class="badge bg-green badge-round">
+<span class="badge bg-success">
 <?= $d['total_items'] ?> รายการ
 </span>
 </td>
 
 <td><?= $d['transfer_date'] ?></td>
-<td><?= $d['transfer_date'] ?></td>
 
-
-<!-- 🔥 สถานะ -->
 <td>
 <?php
 if($d['received_items'] == $d['total_items']){
-    echo "<span class='badge bg-success'>✅ รับเสร็จสิ้น</span>";
-}
-elseif($d['received_items'] > 0){
-    echo "<span class='badge bg-warning text-dark'>📦 รับบางส่วน</span>";
-}
-else{
-    echo "<span class='badge bg-secondary'>⏳ รอรับ</span>";
+    echo "<span class='badge bg-success badge-status'>✅ สำเร็จ</span>";
+}elseif($d['received_items'] > 0){
+    echo "<span class='badge bg-warning text-dark badge-status'>📦 บางส่วน</span>";
+}else{
+    echo "<span class='badge bg-secondary badge-status'>⏳ รอรับ</span>";
 }
 ?>
 </td>
 
-<!-- 🔥 จัดการ -->
 <td>
-
 <a href="transfer_detail.php?round=<?= $d['sent_transfer'] ?>" 
-class="btn btn-success btn-sm">
-🖨️ 
+class="btn btn-sm btn-success">
+🖨️
 </a>
-
 </td>
 
-
 <td>
-
-<?php if($d['received_items'] == 0){ ?>
-
-<a href="?cancel=<?= $d['sent_transfer'] ?>" 
-class="btn btn-danger btn-sm"
-onclick="return confirm('ยืนยันยกเลิกรายการนี้ทั้งรอบ ?')">
-❌ ยกเลิก
+<a href="transfer_shipping_check.php?round=<?= $d['sent_transfer'] ?>" 
+class="btn btn-sm btn-info">
+📋
 </a>
-
-<?php } else { ?>
-
-<span class="badge bg-success"></span>
-
-<?php } ?>
-
 </td>
 
-<!-- 🔥 ตรวจเช็ค -->
 <td>
-<a href="transfer_shipping_check.php?round=<?= $d['sent_transfer'] ?>">
-<span class="badge bg-info">📋 ดูรายละเอียด</span>
-</a>
+<?php if($d['received_items'] == 0): ?>
+
+<button class="btn btn-sm btn-danger btnCancel"
+data-id="<?= $d['sent_transfer'] ?>">
+❌
+</button>
+
+<?php endif; ?>
+</td>
 </td>
 
 </tr>
 
 <?php endforeach; ?>
 
+</tbody>
+
 </table>
 
 </div>
 </div>
 </div>
+
+<script>
+/* =====================================================
+🔥 CANCEL MODAL
+===================================================== */
+document.querySelectorAll('.btnCancel').forEach(btn=>{
+
+btn.addEventListener('click', function(){
+
+let id = this.dataset.id;
+
+Swal.fire({
+title:'ยืนยัน?',
+text:'ต้องการยกเลิกรายการนี้ใช่หรือไม่',
+icon:'warning',
+showCancelButton:true,
+confirmButtonText:'ยกเลิก',
+cancelButtonText:'ปิด'
+}).then((res)=>{
+
+if(res.isConfirmed){
+window.location='?cancel='+id;
+}
+
+});
+
+});
+
+});
+</script>
 
 <?php include 'partials/footer.php'; ?>
