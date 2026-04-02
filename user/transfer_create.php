@@ -37,6 +37,7 @@ $userDevices = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 /* =====================================================
 📦 2. โหลดอุปกรณ์ที่รับมาแล้ว (ไม่มีผู้ใช้)
+🔥 แก้ตรงนี้: ไม่เอาที่ "รับแล้ว" ของตัวเอง
 ===================================================== */
 $stmt = $conn->prepare("
 SELECT DISTINCT
@@ -46,9 +47,18 @@ a.spec,a.ram,a.ssd,a.gpu
 FROM IT_AssetTransfer_Headers t
 LEFT JOIN IT_assets a ON a.no_pc = t.no_pc
 WHERE t.to_site = ?
-AND t.receive_status = 'รับแล้ว'
+AND t.receive_status != 'รับแล้ว'
+
+-- 🔥 เพิ่ม: ถ้ามี record ล่าสุดอยู่ที่ site ตัวเองแล้ว → ไม่ต้องแสดง
+AND NOT EXISTS (
+    SELECT 1 FROM IT_AssetTransfer_Headers t2
+    WHERE t2.no_pc = t.no_pc
+    AND t2.to_site = ?
+    AND t2.receive_status = 'รับแล้ว'
+    AND t2.transfer_id > t.transfer_id
+)
 ");
-$stmt->execute([$site]);
+$stmt->execute([$site,$site]);
 $receivedDevices = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 /* =====================================================
@@ -70,7 +80,6 @@ function getTransferStatus($conn,$code,$site){
 ===================================================== */
 $assets = [];
 
-/* === มีผู้ใช้ === */
 foreach($userDevices as $r){
     $code = trim($r['device_code']);
 
@@ -85,7 +94,6 @@ foreach($userDevices as $r){
     ];
 }
 
-/* === ไม่มีผู้ใช้ (รับมาแล้ว) === */
 foreach($receivedDevices as $r){
     $code = trim($r['no_pc']);
 
@@ -111,6 +119,7 @@ foreach($assets as $code => $a){
 
 /* =====================================================
 📨 SUBMIT
+🔥 แก้: กัน F5 (PRG)
 ===================================================== */
 $msg=""; $status="";
 
@@ -121,8 +130,8 @@ if($_SERVER['REQUEST_METHOD']=='POST'){
     $to    = $_POST['to_site'];
 
     if(empty($items)){
-        $msg="กรุณาเลือกอุปกรณ์";
-        $status="error";
+        header("Location: transfer_create.php?error=empty");
+        exit;
     }else{
 
         try{
@@ -145,9 +154,8 @@ if($_SERVER['REQUEST_METHOD']=='POST'){
 
                 $t = $assets[$aid]['transfer'];
 
-                // ❌ กันโอนซ้ำ
                 if($t && $t['receive_status']!='รับแล้ว' && $t['receive_status']!='ยกเลิก'){
-                    throw new Exception("❌ $aid กำลังโอนไปที่ ".$t['to_site']);
+                    throw new Exception("dup");
                 }
 
                 $stmt->execute([
@@ -163,13 +171,16 @@ if($_SERVER['REQUEST_METHOD']=='POST'){
             }
 
             $conn->commit();
-            $msg="ส่งรายการสำเร็จ";
-            $status="success";
+
+            // 🔥 PRG กัน F5
+            header("Location: transfer_create.php?success=1");
+            exit;
 
         }catch(Exception $e){
             $conn->rollBack();
-            $msg=$e->getMessage();
-            $status="error";
+
+            header("Location: transfer_create.php?error=fail");
+            exit;
         }
     }
 }
@@ -330,5 +341,15 @@ title:'<?= $msg ?>'
 });
 </script>
 <?php endif; ?>
+</script>  <!-- script เดิม -->
 
+
+
+<?php if(isset($_GET['error'])): ?>
+<script>
+Swal.fire({icon:'error',title:'เกิดข้อผิดพลาด'});
+</script>
+<?php endif; ?>
+
+<?php include 'partials/footer.php'; ?>
 <?php include 'partials/footer.php'; ?>

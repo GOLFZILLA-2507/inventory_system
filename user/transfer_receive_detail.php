@@ -115,38 +115,49 @@ if(isset($_POST['confirm'])){
             =============================== */
             if($statusVal === 'รับแล้ว'){
 
-                // 🔥 อัปเดตสถานะการรับ
-                $conn->prepare("
-                UPDATE IT_AssetTransfer_Headers
-                SET receive_status='รับแล้ว',
-                    arrived_date = GETDATE()
-                WHERE transfer_id=?
-                ")->execute([$id]);
+    // 🔑 ต้องประกาศก่อนใช้
+    $device_code = $row['no_pc'];
+    $from        = $row['from_site'];
 
-                // 🔑 device_code = no_pc (mapping)
-                $device_code = $row['no_pc'];
-                $from        = $row['from_site']; // โครงการต้นทาง
+    // 🔥 อัปเดตสถานะการรับ
+    $conn->prepare("
+    UPDATE IT_AssetTransfer_Headers
+    SET receive_status='รับแล้ว',
+        arrived_date = GETDATE()
+    WHERE transfer_id=?
+    ")->execute([$id]);
 
-                /* =====================================================
-                🔥 FIX BUG: ลบเฉพาะ 1 row (ไม่ลบเกิน)
-                - หา id ก่อน แล้วค่อย delete ด้วย id
-                ===================================================== */
-                $stmtDel = $conn->prepare("
-                SELECT TOP 1 id
-                FROM IT_user_devices
-                WHERE device_code=? AND user_project=?
-                ORDER BY id ASC
-                ");
-                $stmtDel->execute([$device_code, $from]);
-                $delRow = $stmtDel->fetch(PDO::FETCH_ASSOC);
+    /* =====================================================
+    🔥 FIX: อัปเดตโครงการลง IT_assets (ตอนนี้จะทำงานแล้ว)
+    ===================================================== */
+    $conn->prepare("
+    UPDATE IT_assets
+    SET use_it = ?
+    WHERE no_pc = ?
+    ")->execute([
+        $site,
+        $device_code
+    ]);
 
-                if($delRow){
-                    $conn->prepare("
-                    DELETE FROM IT_user_devices
-                    WHERE id=?
-                    ")->execute([$delRow['id']]);
-                }
-            }
+    /* =====================================================
+    🔥 ลบ user เดิม
+    ===================================================== */
+    $stmtDel = $conn->prepare("
+    SELECT TOP 1 id
+    FROM IT_user_devices
+    WHERE device_code=? AND user_project=?
+    ORDER BY id ASC
+    ");
+    $stmtDel->execute([$device_code, $from]);
+    $delRow = $stmtDel->fetch(PDO::FETCH_ASSOC);
+
+    if($delRow){
+        $conn->prepare("
+        DELETE FROM IT_user_devices
+        WHERE id=?
+        ")->execute([$delRow['id']]);
+    }
+}
         }
 
         $conn->commit();

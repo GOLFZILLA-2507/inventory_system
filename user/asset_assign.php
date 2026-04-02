@@ -37,11 +37,24 @@ function countDevice($conn,$emp,$type){
 🔥 insert
 ===================================================== */
 function insertDevice($conn,$emp,$site,$type,$role,$code,$user){
+
+    /* ================= INSERT ================= */
     $conn->prepare("
         INSERT INTO IT_user_devices
         (user_employee,user_project,device_type,device_role,device_code,created_by,user_record)
         VALUES (?,?,?,?,?,?,?)
     ")->execute([$emp,$site,$type,$role,$code,$user,$user]);
+
+    /* ================= UPDATE IT_assets ================= */
+    // อัพเดทโครงการลงใน use_it
+    // ใช้ no_pc เป็นตัว match กับ device_code
+    $stmt = $conn->prepare("
+        UPDATE IT_assets
+        SET use_it = ?
+        WHERE no_pc = ?
+    ");
+
+    $stmt->execute([$site,$code]);
 }
 
 /* =====================================================

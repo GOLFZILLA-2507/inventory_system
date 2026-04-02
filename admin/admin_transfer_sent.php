@@ -2,19 +2,60 @@
 require_once '../config/connect.php';
 require_once '../config/checklogin.php';
 
-/* =====================================================
-🔥 PARAM
-===================================================== */
-$filter_site = $_GET['site'] ?? 'ทุกโครงการ'; // filter โครงการ
-$status = $_GET['status'] ?? ''; // filter สถานะ
+/* ================= PARAM ================= */
+$filter_site = $_GET['site'] ?? 'ทุกโครงการ';
+$status = $_GET['status'] ?? '';
+$search = $_GET['search'] ?? '';
 
-$page = $_GET['page'] ?? 1; // pagination
-$limit = 15; // จำนวนรายการต่อหน้า
-$offset = ($page - 1) * $limit; // คำนวณ offset สำหรับ SQL
+$page = $_GET['page'] ?? 1;
+$limit = 10;
+$offset = ($page - 1) * $limit;
 
-/* =====================================================
-🔥 สร้าง SQL (สำคัญมาก)
-===================================================== */
+/* ================= COUNT TOTAL PAGE ================= */
+$countSql = "
+SELECT COUNT(DISTINCT sent_transfer)
+FROM IT_AssetTransfer_Headers
+WHERE sent_transfer IS NOT NULL
+AND ( ? = 'ทุกโครงการ' OR from_site = ? )
+";
+
+$countParams = [$filter_site,$filter_site];
+
+/* 🔥 search */
+if($search){
+    $countSql .= " AND (
+        sent_transfer LIKE ?
+        OR from_site LIKE ?
+        OR to_site LIKE ?
+    ) ";
+    $countParams[] = "%$search%";
+    $countParams[] = "%$search%";
+    $countParams[] = "%$search%";
+}
+
+/* 🔥 filter */
+if($status == 'cancel'){
+    $countSql .= " AND receive_status = 'ยกเลิก' ";
+}
+elseif($status == 'waiting'){
+    $countSql .= " AND admin_status = 'รออนุมัติ' ";
+}
+elseif($status == 'received'){
+    $countSql .= " AND receive_status = 'รับแล้ว' ";
+}
+
+$stmtCount = $conn->prepare($countSql);
+$stmtCount->execute($countParams);
+$totalRows = $stmtCount->fetchColumn();
+
+/* 🔥 คำนวณหน้า */
+$totalPages = ceil($totalRows / $limit);
+
+/* 🔥 กัน page เกิน */
+if($page > $totalPages) $page = $totalPages;
+if($page < 1) $page = 1;
+
+/* ================= SQL ================= */
 $sql = "
 SELECT 
     sent_transfer,
@@ -25,56 +66,77 @@ SELECT
     MIN(transfer_date) AS transfer_date,
     COUNT(*) AS total_items,
 
-    MAX(receive_status) AS receive_status,
-    MAX(admin_status) AS admin_status
+    SUM(CASE WHEN receive_status = 'รับแล้ว' THEN 1 ELSE 0 END) AS received_count,
+    SUM(CASE WHEN receive_status = 'ยกเลิก' THEN 1 ELSE 0 END) AS cancel_count,
+    SUM(CASE WHEN receive_status IN ('รอตรวจรับ','ไม่พบอุปกรณ์นี้') THEN 1 ELSE 0 END) AS pending_count,
+    SUM(CASE WHEN admin_status = 'รออนุมัติ' THEN 1 ELSE 0 END) AS waiting_count
 
-    FROM IT_AssetTransfer_Headers
-    WHERE sent_transfer IS NOT NULL
+FROM IT_AssetTransfer_Headers
 
-    AND (
-        ? = 'ทุกโครงการ'
-        OR from_site = ?
-    )
-    ";
+WHERE sent_transfer IS NOT NULL
 
-/* =====================================================
-🔥 filter สถานะ (ต้องอยู่นอก SQL เท่านั้น)
-===================================================== */
-    if($status == 'cancel'){
-        $sql .= " AND receive_status = 'ยกเลิก' ";
-    }
-    elseif($status == 'waiting'){
-        $sql .= " AND admin_status = 'รออนุมัติ' ";
-    }
-    elseif($status == 'received'){
-        $sql .= " AND receive_status = 'รับแล้ว' ";
-    }
-/* =====================================================
-🔥 GROUP + PAGINATION
-===================================================== */
+/* 🔥 filter โครงการ */
+AND ( ? = 'ทุกโครงการ' OR from_site = ? )
+
+/* 🔥 search */
+";
+
+/* 🔥 SEARCH */
+if($search){
+    $sql .= " AND (
+        sent_transfer LIKE ?
+        OR from_site LIKE ?
+        OR to_site LIKE ?
+    ) ";
+}
+
+/* 🔥 FILTER STATUS */
+if($status == 'cancel'){
+    $sql .= " AND receive_status = 'ยกเลิก' ";
+}
+elseif($status == 'waiting'){
+    $sql .= " AND admin_status = 'รออนุมัติ' ";
+}
+elseif($status == 'received'){
+    $sql .= " AND receive_status = 'รับแล้ว' ";
+}
+
+/* ================= GROUP ================= */
 $sql .= "
 GROUP BY 
     sent_transfer,
     from_site,
     to_site,
     transfer_type
+";
 
+/* 🔥 กัน received เพี้ยน */
+if($status == 'received'){
+    $sql .= " HAVING SUM(CASE WHEN receive_status = 'รับแล้ว' THEN 1 ELSE 0 END) = COUNT(*) ";
+}
+
+/* ================= PAGE ================= */
+$sql .= "
 ORDER BY sent_transfer DESC
 OFFSET $offset ROWS FETCH NEXT $limit ROWS ONLY
 ";
 
-/* =====================================================
-🔥 EXECUTE
-===================================================== */
+/* ================= EXECUTE ================= */
+$params = [$filter_site,$filter_site];
+
+if($search){
+    $params[] = "%$search%";
+    $params[] = "%$search%";
+    $params[] = "%$search%";
+}
+
 $stmt = $conn->prepare($sql);
-$stmt->execute([$filter_site,$filter_site,$filter_site]);
+$stmt->execute($params);
 $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+/* ================= SITE ================= */
 $siteList = $conn->query("
-SELECT DISTINCT from_site 
-FROM IT_AssetTransfer_Headers
-WHERE from_site IS NOT NULL
-ORDER BY from_site
+SELECT DISTINCT from_site FROM IT_AssetTransfer_Headers
 ")->fetchAll(PDO::FETCH_COLUMN);
 
 include 'partials/header.php';
@@ -82,66 +144,59 @@ include 'partials/sidebar.php';
 ?>
 
 <style>
-.card-header{
-    background:linear-gradient(135deg,#0d6efd,#4dabf7);
-    color:white;
+/* 🔥 hover animation เบาๆ */
+.table-hover tbody tr{
+    transition: all 0.2s ease;
 }
 .table-hover tbody tr:hover{
-    background:#e7f1ff;
-}
-.badge-round{
-    background:#0d6efd;
+    background:#eef5ff;
+    transform: scale(1.01);
 }
 </style>
 
 <div class="container mt-4">
-
 <div class="card shadow">
 
-<div class="card-header">
-📦 ประวัตการโอนย้าย/ส่งมอบ อุปกรณ์
+<div class="card-header bg-primary text-white">
+📦 ประวัตการโอนย้าย
 </div>
 
 <div class="card-body">
 
-<!-- 🔍 SEARCH + FILTER -->
-<div class="row mb-3">
+<!-- 🔥 FILTER + SEARCH -->
+<form method="get" class="row mb-3">
 
-<div class="col-md-4">
-<input type="text" id="search" class="form-control" placeholder="🔍 ค้นหา (รอบ / โครงการ)">
+<div class="col-md-3">
+<input type="text" name="search" value="<?= $search ?>" 
+class="form-control" placeholder="🔍 ค้นหา">
 </div>
 
-<div class="col-md-4">
-<form method="get" class="row">
-
-<div class="col-md-6">
-<select name="site" class="form-control" onchange="this.form.submit()">
-
-<option value="ทุกโครงการ">ทุกโครงการ</option>
-
+<div class="col-md-3">
+<select name="site" class="form-control">
+<option>ทุกโครงการ</option>
 <?php foreach($siteList as $s): ?>
 <option value="<?= $s ?>" <?= $filter_site==$s?'selected':'' ?>>
 <?= $s ?>
 </option>
 <?php endforeach; ?>
-
 </select>
 </div>
 
-<div class="col-md-6">
-<select name="status" class="form-control" onchange="this.form.submit()">
+<div class="col-md-3">
+<select name="status" class="form-control">
 <option value="">-- ทุกสถานะ --</option>
 <option value="waiting" <?= $status=='waiting'?'selected':'' ?>>รออนุมัติ</option>
-<option value="received" <?= $status=='received'?'selected':'' ?>>รับแล้ว</option>
+<option value="received" <?= $status=='received'?'selected':'' ?>>รับครบ</option>
 <option value="cancel" <?= $status=='cancel'?'selected':'' ?>>ยกเลิก</option>
-
 </select>
+</div>
+
+<div class="col-md-3 d-flex gap-2">
+<button class="btn btn-primary w-100">ค้นหา</button>
+<a href="admin_transfer_sent.php" class="btn btn-secondary w-100">ล้าง</a>
 </div>
 
 </form>
-</div>
-
-</div>
 
 <table class="table table-bordered table-hover text-center">
 
@@ -151,63 +206,53 @@ include 'partials/sidebar.php';
 <th>รอบ</th>
 <th>จาก</th>
 <th>ไป</th>
-<th>ประเภท</th>
 <th>จำนวน</th>
-<th>วันที่</th>
+<th>รับแล้ว</th>
 <th>สถานะ</th>
 <th>จัดการ</th>
 </tr>
 </thead>
 
-<tbody id="tableBody">
+<tbody>
 
-<?php $i = $offset + 1; foreach($data as $d): ?>
+<?php $i=1; foreach($data as $d): ?>
 
 <tr>
-
 <td><?= $i++ ?></td>
 
-<td class="round">
-<span class="badge badge-round">
+<td>
+<span class="badge bg-primary">
 ครั้งที่ <?= $d['sent_transfer'] ?>
 </span>
 </td>
 
-<td class="from">
-    <span class="badge bg-gray text-dark">
-<?= htmlspecialchars($d['from_site']) ?>
-</span>
-</td>
+<td><?= $d['from_site'] ?></td>
+<td><?= $d['to_site'] ?></td>
 
-<td class="to">
-<span class="badge bg-gray text-dark">
-<?= htmlspecialchars($d['to_site']) ?>
-</span>
-</td>
-
-<td><?= htmlspecialchars($d['transfer_type']) ?></td>
+<td><?= $d['total_items'] ?></td>
 
 <td>
-<span class="badge bg-dark">
-<?= $d['total_items'] ?> รายการ
+<span class="badge bg-success">
+<?= $d['received_count'] ?> / <?= $d['total_items'] ?>
 </span>
 </td>
-
-<td><?= $d['transfer_date'] ?></td>
 
 <td>
 <?php
-if($d['receive_status'] == 'ยกเลิก'){
+if($d['cancel_count'] > 0){
     echo "<span class='badge bg-danger'>❌ ยกเลิก</span>";
 }
-elseif($d['admin_status'] == 'รออนุมัติ'){
+elseif($d['waiting_count'] > 0){
     echo "<span class='badge bg-warning text-dark'>⏳ รออนุมัติ</span>";
 }
-elseif($d['receive_status'] == 'รับแล้ว'){
-    echo "<span class='badge bg-success'>✅ รับแล้ว</span>";
+elseif($d['pending_count'] > 0){
+    echo "<span class='badge bg-info'>📦 รอตรวจรับ</span>";
+}
+elseif($d['received_count'] == $d['total_items']){
+    echo "<span class='badge bg-success'>✅ รับครบ</span>";
 }
 else{
-    echo "<span class='badge bg-secondary'>ไม่ทราบสถานะ</span>";
+    echo "<span class='badge bg-secondary'>ไม่ทราบ</span>";
 }
 ?>
 </td>
@@ -215,7 +260,7 @@ else{
 <td>
 <a href="approve_transfer_detail.php?round=<?= $d['sent_transfer'] ?>" 
 class="btn btn-primary btn-sm">
-🔍 ดูรายละเอียด
+🔍 อนุมัติ
 </a>
 </td>
 
@@ -224,21 +269,24 @@ class="btn btn-primary btn-sm">
 <?php endforeach; ?>
 
 </tbody>
-
 </table>
 
-<!-- 🔥 PAGINATION -->
-<div class="text-center mt-3">
+<div class="d-flex justify-content-center align-items-center mt-3 gap-2">
 
-<a href="?page=<?= max(1,$page-1) ?>&site=<?= $filter_site ?>&status=<?= $status ?>" 
-class="btn btn-primary">
+<!-- 🔙 ย้อนกลับ -->
+<a href="?page=<?= max(1,$page-1) ?>&site=<?= $filter_site ?>&status=<?= $status ?>&search=<?= $search ?>" 
+class="btn btn-primary <?= $page<=1?'disabled':'' ?>">
 ⬅ ย้อนกลับ
 </a>
 
-<span class="mx-3">หน้า <?= $page ?></span>
+<!-- 🔢 แสดงหน้า -->
+<span class="fw-bold">
+หน้า <?= $page ?> / <?= $totalPages ?>
+</span>
 
-<a href="?page=<?= $page+1 ?>&site=<?= $filter_site ?>&status=<?= $status ?>" 
-class="btn btn-primary">
+<!-- 🔜 ถัดไป -->
+<a href="?page=<?= min($totalPages,$page+1) ?>&site=<?= $filter_site ?>&status=<?= $status ?>&search=<?= $search ?>" 
+class="btn btn-primary <?= $page>=$totalPages?'disabled':'' ?>">
 ถัดไป ➡
 </a>
 
@@ -249,21 +297,3 @@ class="btn btn-primary">
 </div>
 
 <?php include 'partials/footer.php'; ?>
-
-<script>
-const search = document.getElementById("search");
-const rows = document.querySelectorAll("#tableBody tr");
-
-search.addEventListener("keyup", function(){
-let keyword = this.value.toLowerCase();
-
-rows.forEach(row=>{
-let round = row.querySelector(".round").innerText.toLowerCase();
-let from = row.querySelector(".from").innerText.toLowerCase();
-let to   = row.querySelector(".to").innerText.toLowerCase();
-
-let match = round.includes(keyword) || from.includes(keyword) || to.includes(keyword);
-row.style.display = match ? "" : "none";
-});
-});
-</script>

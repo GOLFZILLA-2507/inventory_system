@@ -3,7 +3,6 @@ require_once '../config/connect.php';
 require_once '../config/checklogin.php';
 
 $round = $_GET['round'] ?? 0;
-// 🔥 ดึง role จาก session
 $role = $_SESSION['role_ivt'] ?? '';
 
 /* =====================================================
@@ -24,15 +23,12 @@ if(isset($_POST['approve_selected'])){
         $stmt->execute($ids);
     }
 
-    header("Location: approve_transfer_detail.php?round=".$round);
+    header("Location: approve_transfer_detail.php?round=".$round."&success=1");
     exit;
 }
 
-
-
-
 /* =====================================================
-🔥 โหลดรายการทั้งหมดในรอบ
+🔥 LOAD DATA
 ===================================================== */
 $stmt = $conn->prepare("
 SELECT *
@@ -44,7 +40,7 @@ $stmt->execute([$round]);
 $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 /* =====================================================
-🔥 เช็คว่ามีรายการยกเลิกในรอบนี้ไหม
+🔥 CHECK STATUS
 ===================================================== */
 $stmtCancel = $conn->prepare("
 SELECT COUNT(*) 
@@ -53,12 +49,8 @@ WHERE sent_transfer = ?
 AND receive_status = 'ยกเลิก'
 ");
 $stmtCancel->execute([$round]);
-
 $hasCancel = $stmtCancel->fetchColumn();
 
-/* =====================================================
-🔥 เช็คว่าอนุมัติครบหรือยัง
-===================================================== */
 $stmtCheck = $conn->prepare("
 SELECT COUNT(*) 
 FROM IT_AssetTransfer_Headers
@@ -67,102 +59,33 @@ AND admin_status != 'อนุมัติ'
 AND (receive_status IS NULL OR receive_status != 'ยกเลิก')
 ");
 $stmtCheck->execute([$round]);
-
 $remain = $stmtCheck->fetchColumn();
 
 include 'partials/header.php';
 include 'partials/sidebar.php';
 ?>
 
-<style>
-
-/* =====================================================
-🔥 THEME น้ำเงินฟ้า
-===================================================== */
-.card-header{
-    background:linear-gradient(135deg,#0d6efd,#4dabf7);
-    color:white;
-}
-
-.table-hover tbody tr:hover{
-    background:#e7f1ff;
-}
-
-/* 🔥 badge */
-.badge-success{
-    background:#198754;
-}
-.badge-warning{
-    background:#ffc107;
-    color:black;
-}
-
-/* 🔥 ปุ่ม */
-.btn-main{
-    background:#0d6efd;
-    color:white;
-}
-.btn-main:hover{
-    background:#0b5ed7;
-}
-
-.btn-back{
-    background:#6c757d;
-    color:white;
-}
-.btn-back:hover{
-    background:#5c636a;
-}
-
-/* 🔥 checkbox */
-input[type="checkbox"]{
-    transform:scale(1.2);
-    cursor:pointer;
-}
-
-/* 🔥 card */
-.card{
-    border-radius:12px;
-    box-shadow:0 4px 15px rgba(0,0,0,0.1);
-}
-
-</style>
-
 <div class="container mt-4">
+<div class="card shadow">
 
-<div class="card">
-
-<div class="card-header">
-<h5 class="mb-0">📦 รอบที่ <?= $round ?></h5>
+<div class="card-header bg-primary text-white">
+📦 รอบที่ <?= $round ?>
 </div>
 
 <div class="card-body">
 
-<!-- 🔥 แจ้งเตือน -->
 <?php if($hasCancel > 0){ ?>
-
-<div class="alert alert-danger">
-❌ รอบรายการนี้มีรายการถูกยกเลิก
-</div>
-
+<div class="alert alert-danger">❌ มีรายการถูกยกเลิก</div>
 <?php } elseif($remain == 0){ ?>
-
-<div class="alert alert-success">
-✅ อนุมัติครบทุกรายการแล้ว
-</div>
-
+<div class="alert alert-success">✅ อนุมัติครบแล้ว</div>
 <?php } ?>
 
+<form method="post" id="mainForm">
 
-<form method="post">
-
-<table class="table table-bordered table-hover text-center align-middle">
-
+<table class="table table-bordered text-center align-middle">
 <thead class="table-primary">
 <tr>
-<th>
-<input type="checkbox" id="checkAll">
-</th>
+<th><input type="checkbox" id="checkAll"></th>
 <th>ID</th>
 <th>รหัส</th>
 <th>ประเภท</th>
@@ -173,80 +96,44 @@ input[type="checkbox"]{
 </thead>
 
 <tbody>
-
 <?php foreach($data as $d){ ?>
-
-
-
 <tr>
 
 <td>
-
-<?php 
-// ❗ ห้ามเลือกถ้า "ยกเลิก"
-if($d['admin_status'] != 'อนุมัติ' && $d['receive_status'] != 'ยกเลิก'){ 
-?>
-<input type="checkbox" 
-name="ids[]" 
-value="<?= $d['transfer_id'] ?>" 
-class="item">
+<?php if($d['admin_status'] != 'อนุมัติ' && $d['receive_status'] != 'ยกเลิก'){ ?>
+<input type="checkbox" name="ids[]" value="<?= $d['transfer_id'] ?>" class="item">
 <?php } ?>
-
 </td>
 
 <td><?= $d['transfer_id'] ?></td>
-
-<td class="fw-bold text-primary">
-<?= htmlspecialchars($d['no_pc']) ?>
-</td>
-
-<td><?= htmlspecialchars($d['type']) ?></td>
-
-<td><?= htmlspecialchars($d['from_site']) ?></td>
-
-<td><?= htmlspecialchars($d['to_site']) ?></td>
+<td class="fw-bold text-primary"><?= $d['no_pc'] ?></td>
+<td><?= $d['type'] ?></td>
+<td><?= $d['from_site'] ?></td>
+<td><?= $d['to_site'] ?></td>
 
 <td>
-
-<?php if($d['receive_status'] == 'ยกเลิก'){ ?>
-
-<span class="badge bg-danger">
-❌ ถูกยกเลิก
-</span>
-
-<?php } elseif($d['admin_status'] == 'อนุมัติ'){ ?>
-
-<span class="badge badge-success">
-✅ อนุมัติแล้ว
-</span>
-
+<?php if($d['receive_status']=='ยกเลิก'){ ?>
+<span class="badge bg-danger">❌ ยกเลิก</span>
+<?php } elseif($d['admin_status']=='อนุมัติ'){ ?>
+<span class="badge bg-success">✅ อนุมัติ</span>
 <?php } else { ?>
-
-<span class="badge badge-warning">
-⏳ รออนุมัติ
-</span>
-
+<span class="badge bg-warning text-dark">⏳ รออนุมัติ</span>
 <?php } ?>
 </td>
 
 </tr>
-
 <?php } ?>
-
 </tbody>
-
 </table>
 
-<div class="d-flex justify-content-between mt-3">
+<div class="d-flex justify-content-between">
 
-<!-- 🔥 ปุ่มย้อนกลับ -->
-<a href="admin_transfer_sent.php" class="btn btn-back">
+<a href="admin_transfer_sent.php" class="btn btn-secondary">
 ⬅️ ย้อนกลับ
 </a>
 
-<!-- 🔥 เงื่อนไขปุ่ม -->
 <?php if($remain > 0 && $role != 'MD'){ ?>
-<button class="btn btn-main" name="approve_selected">
+<button type="button" id="btnApprove" class="btn btn-primary">
 ✅ อนุมัติที่เลือก
 </button>
 <?php } ?>
@@ -259,12 +146,104 @@ class="item">
 </div>
 </div>
 
-<?php include 'partials/footer.php'; ?>
+<!-- ================= MODAL CONFIRM ================= -->
+<div class="modal fade" id="confirmModal" tabindex="-1">
+<div class="modal-dialog modal-dialog-centered">
+<div class="modal-content">
+
+<div class="modal-header bg-primary text-white">
+<h5>ยืนยันการอนุมัติ</h5>
+<button class="btn-close" data-bs-dismiss="modal"></button>
+</div>
+
+<div class="modal-body text-center">
+ต้องการอนุมัติรายการที่เลือกใช่หรือไม่?
+</div>
+
+<div class="modal-footer">
+<button class="btn btn-secondary" data-bs-dismiss="modal">ยกเลิก</button>
+<button id="confirmSubmit" class="btn btn-primary">ยืนยัน</button>
+</div>
+
+</div>
+</div>
+</div>
+
+<!-- ================= MODAL SUCCESS ================= -->
+<div class="modal fade" id="successModal" tabindex="-1">
+<div class="modal-dialog modal-dialog-centered">
+<div class="modal-content">
+
+<div class="modal-header bg-success text-white">
+<h5>สำเร็จ</h5>
+<button class="btn-close" data-bs-dismiss="modal"></button>
+</div>
+
+<div class="modal-body text-center">
+✅ อนุมัติรายการเรียบร้อยแล้ว
+</div>
+
+<div class="modal-footer">
+<button class="btn btn-success" data-bs-dismiss="modal">ตกลง</button>
+</div>
+
+</div>
+</div>
+</div>
+
+<!-- 🔥 สำคัญ: ต้องมี -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
 <script>
-document.getElementById('checkAll').addEventListener('change', function(){
+// ✅ check all
+document.getElementById('checkAll').onchange = function(){
     document.querySelectorAll('.item').forEach(cb=>{
         cb.checked = this.checked;
     });
+};
+
+// ✅ เปิด modal
+document.getElementById('btnApprove')?.addEventListener('click', function(){
+
+    let checked = document.querySelectorAll('.item:checked');
+
+    if(checked.length === 0){
+        alert('❌ กรุณาเลือกรายการ');
+        return;
+    }
+
+    let modal = new bootstrap.Modal(document.getElementById('confirmModal'));
+    modal.show();
 });
+
+// ✅ submit จริง
+document.getElementById('confirmSubmit').onclick = function(){
+
+    let form = document.getElementById('mainForm');
+
+    // 🔥 inject approve_selected
+    if(!form.querySelector('[name="approve_selected"]')){
+        let input = document.createElement("input");
+        input.type = "hidden";
+        input.name = "approve_selected";
+        input.value = "1";
+        form.appendChild(input);
+    }
+
+    form.submit();
+};
+
+// ✅ success modal
+<?php if(isset($_GET['success'])): ?>
+window.addEventListener('DOMContentLoaded', function(){
+
+    let modal = new bootstrap.Modal(document.getElementById('successModal'));
+    modal.show();
+
+    // กัน refresh แล้วเด้งซ้ำ
+    window.history.replaceState({}, document.title, window.location.pathname + '?round=<?= $round ?>');
+});
+<?php endif; ?>
 </script>
+
+<?php include 'partials/footer.php'; ?>

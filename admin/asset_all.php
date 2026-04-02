@@ -3,17 +3,19 @@ require_once '../config/connect.php';
 require_once '../config/checklogin.php';
 
 /* ================= PARAM ================= */
-$search = $_GET['search'] ?? ''; //ฟิลเตอร์ค้นหา (รหัส, ผู้ใช้, โครงการ)
-$type   = $_GET['type'] ?? ''; //ฟิลเตอร์ประเภท (PC, Monitor, Printer, etc.)
-$proj   = $_GET['project'] ?? ''; //ฟิลเตอร์โครงการ
-$page   = $_GET['page'] ?? 1;   //ฟิลเตอร์หน้า
-$status = $_GET['status'] ?? ''; //ฟิลเตอร์สถานะ (used/free)
-$grade  = $_GET['grade'] ?? ''; //ฟิลเตอร์เกรด (A/B/C)
+$search = $_GET['search'] ?? '';
+$type   = $_GET['type'] ?? '';
+$proj   = $_GET['project'] ?? '';
+$page   = $_GET['page'] ?? 1;
+$status = $_GET['status'] ?? '';
+$grade  = $_GET['grade'] ?? '';
 
-$limit  = 50; //จำนวนรายการต่อหน้า
-$offset = ($page-1)*$limit; //คำนวณ offset สำหรับ pagination
+$limit  = 50;
+$offset = ($page-1)*$limit;
 
-/* ================= SAVE ================= */
+/* =====================================================
+🔥 SAVE ASSET (เหมือนเดิม)
+===================================================== */
 if(isset($_POST['save'])){
 
     $id = $_POST['asset_id'];
@@ -27,33 +29,14 @@ if(isset($_POST['save'])){
     $date1 = !empty($y1) ? date('Y-m-01', strtotime($y1)) : null;
     $date2 = !empty($y2) ? date('Y-m-01', strtotime($y2)) : null;
 
-    // 🔥 อายุ CPU
     $how1 = $date1 ? date('Y') - date('Y', strtotime($date1)) : null;
-
-    // 🔥 อายุใช้งานจริง
     $how2 = $date2 ? date('Y') - date('Y', strtotime($date2)) : null;
 
-    /* =========================================
-    🔥 คำนวณ GRADE (เพิ่มใหม่)
-    ========================================= */
-    $grade = null;
+    if($how2 === null) $grade = null;
+    elseif($how2 < 6) $grade = 'A';
+    elseif($how2 <= 7) $grade = 'B';
+    else $grade = 'C';
 
-    if($how2 === null){
-        $grade = null;
-    }
-    elseif($how2 < 6){
-        $grade = 'A';
-    }
-    elseif($how2 <= 7){
-        $grade = 'B';
-    }
-    else{
-        $grade = 'C';
-    }
-
-    /* =========================================
-    🔥 UPDATE (เพิ่ม device_grade)
-    ========================================= */
     $stmt = $conn->prepare("
         UPDATE IT_assets SET
             machine_value=?,
@@ -61,179 +44,78 @@ if(isset($_POST['save'])){
             How_long=?,
             yfm_2=?,
             How_long2=?,
-            device_grade=?   -- 🔥 เพิ่มตรงนี้
+            device_grade=?
         WHERE asset_id=?
     ");
 
-    $stmt->execute([
-        $value,
-        $date1,
-        $how1,
-        $date2,
-        $how2,
-        $grade,   // 🔥 เก็บเกรดลง DB
-        $id
-    ]);
+    $stmt->execute([$value,$date1,$how1,$date2,$how2,$grade,$id]);
 
     header("Location: asset_all.php");
     exit();
 }
 
-    /* ================= SAVE USER (เพิ่มใหม่) ================= */
+/* =====================================================
+🔥 SAVE USER (แก้ใหม่)
+===================================================== */
 if(isset($_POST['save_user'])){
 
     $asset_id = $_POST['asset_id'];
     $user_emp = trim($_POST['user_employee']);
-    $target_project = $_POST['target_project'] ?? null;
+    $target_project = $_POST['target_project'];
 
-    // 🔥 หา asset
-    $asset = $conn->prepare("
-        SELECT type_equipment, no_pc 
+    if(empty($user_emp)){
+        header("Location: asset_all.php?error=nouser");
+        exit();
+    }
+
+    /* 🔥 ดึง asset */
+    $stmt = $conn->prepare("
+        SELECT no_pc, type_equipment 
         FROM IT_assets 
         WHERE asset_id=?
     ");
-    $asset->execute([$asset_id]);
-    $assetData = $asset->fetch(PDO::FETCH_ASSOC);
+    $stmt->execute([$asset_id]);
+    $asset = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    $type = strtolower(trim($assetData['type_equipment']));
-    $no_pc = $assetData['no_pc'];
-
-    // 🔥 อุปกรณ์ใช้ร่วม
-    $shared = ['cctv','printer','projector'];
+    $no_pc = $asset['no_pc'];
+    $type  = $asset['type_equipment'];
 
     /* =====================================================
-       🔵 กรณี: อุปกรณ์ใช้ร่วม (SHARED)
+    🔥 กันซ้ำ "ระดับเครื่อง" (สำคัญ)
     ===================================================== */
-    if(in_array($type, $shared)){
+    $check = $conn->prepare("
+        SELECT * FROM IT_user_devices
+        WHERE device_code=?
+    ");
+    $check->execute([$no_pc]);
 
-        // 🔥 หาแถว shared ของ project นี้
-        $check = $conn->prepare("
-            SELECT * FROM IT_user_information
-            WHERE user_project=? 
-            AND user_type_equipment='SHARED'
-        ");
-        $check->execute([$target_project]);
-        $row = $check->fetch(PDO::FETCH_ASSOC);
-
-        if($row){
-            // 🔄 update รวมค่า (ต่อ string)
-            $old = $row['user_'.$type];
-
-            $newVal = $old ? $old . "," . $no_pc : $no_pc;
-
-            $stmt = $conn->prepare("
-                UPDATE IT_user_information
-                SET user_$type = ?
-                WHERE id = ?
-            ");
-            $stmt->execute([$newVal, $row['id']]);
-
-        }else{
-            // ➕ สร้างแถวใหม่ shared
-            $stmt = $conn->prepare("
-                INSERT INTO IT_user_information(user_project,user_type_equipment,user_$type)
-                VALUES(?,?,?)
-            ");
-            $stmt->execute([$target_project,'SHARED',$no_pc]);
-        }
-
-    }else{
-
-        /* =====================================================
-           🔴 กรณี: อุปกรณ์หลัก / ส่วนบุคคล
-        ===================================================== */
-
-        if(empty($user_emp)){
-            header("Location: asset_all.php?error=nouser");
-            exit();
-        }
-
-        // 🔥 หา user ใน project นี้
-        $checkUser = $conn->prepare("
-            SELECT * FROM IT_user_information
-            WHERE user_employee=? 
-            AND user_project=?
-            AND (user_type_equipment IS NULL OR user_type_equipment <> 'SHARED')
-        ");
-        $checkUser->execute([$user_emp,$target_project]);
-        $userRow = $checkUser->fetch(PDO::FETCH_ASSOC);
-
-        if($userRow){
-
-            // 🔥 มี user แล้ว → UPDATE แทน INSERT
-
-            if($type == 'pc'){
-                // 🖥 เครื่องหลัก
-                $stmt = $conn->prepare("
-                    UPDATE IT_user_information
-                    SET user_no_pc=?
-                    WHERE id=?
-                ");
-                $stmt->execute([$no_pc,$userRow['id']]);
-
-            }elseif($type == 'monitor'){
-
-                // 🖥 จอ → ใส่ช่องว่าง
-                if(empty($userRow['user_monitor1'])){
-                    $stmt = $conn->prepare("
-                        UPDATE IT_user_information
-                        SET user_monitor1=?
-                        WHERE id=?
-                    ");
-                    $stmt->execute([$no_pc,$userRow['id']]);
-
-                }elseif(empty($userRow['user_monitor2'])){
-                    $stmt = $conn->prepare("
-                        UPDATE IT_user_information
-                        SET user_monitor2=?
-                        WHERE id=?
-                    ");
-                    $stmt->execute([$no_pc,$userRow['id']]);
-                }
-
-            }else{
-
-                // 🔧 อุปกรณ์อื่น (generic)
-                $stmt = $conn->prepare("
-                    UPDATE IT_user_information
-                    SET user_$type=?
-                    WHERE id=?
-                ");
-                $stmt->execute([$no_pc,$userRow['id']]);
-            }
-
-        }else{
-
-            // ➕ ยังไม่มี → insert ใหม่
-            $stmt = $conn->prepare("
-                INSERT INTO IT_user_information(asset_id,user_employee,user_project,user_no_pc)
-                VALUES(?,?,?,?)
-            ");
-            $stmt->execute([$asset_id,$user_emp,$target_project,$no_pc]);
-        }
+    if($check->fetch()){
+        header("Location: asset_all.php?error=duplicate");
+        exit();
     }
+
+    /* 🔥 INSERT */
+    $stmt = $conn->prepare("
+        INSERT INTO IT_user_devices
+        (device_code, device_type, user_employee, user_project)
+        VALUES (?,?,?,?)
+    ");
+    $stmt->execute([$no_pc,$type,$user_emp,$target_project]);
 
     header("Location: asset_all.php");
     exit();
 }
 
-/* ================= FILTER ================= */
-$typeList = $conn->query("SELECT DISTINCT type_equipment FROM IT_assets ORDER BY type_equipment")->fetchAll(PDO::FETCH_ASSOC);
-/* 🔥 เพิ่มตรงนี้ */
-$userList = $conn->query("
-SELECT fullname 
-FROM Employee
-ORDER BY fullname
-")->fetchAll(PDO::FETCH_COLUMN);
+/* =====================================================
+🔥 FILTER DATA
+===================================================== */
+$typeList = $conn->query("SELECT DISTINCT type_equipment FROM IT_assets")->fetchAll(PDO::FETCH_ASSOC);
+$userList = $conn->query("SELECT fullname FROM Employee")->fetchAll(PDO::FETCH_COLUMN);
+$projList = $conn->query("SELECT DISTINCT site FROM Employee")->fetchAll(PDO::FETCH_ASSOC);
 
-$projList = $conn->query("
-SELECT DISTINCT site 
-FROM Employee
-WHERE site IS NOT NULL
-ORDER BY site
-")->fetchAll(PDO::FETCH_ASSOC);
-
-/* ================= MAIN QUERY ================= */
+/* =====================================================
+🔥 MAIN QUERY (แก้ JOIN ตรงนี้)
+===================================================== */
 $sql = "
 SELECT 
 a.asset_id,
@@ -245,49 +127,60 @@ a.machine_value,
 a.yfm_1,a.How_long,
 a.yfm_2,a.How_long2,
 a.device_grade,
+
+/* 🔥 user */
 u.user_employee
+
 FROM IT_assets a
-LEFT JOIN IT_user_information u 
- ON (
-    u.asset_id = a.asset_id 
-    OR u.user_no_pc = a.no_pc
-)
-AND (u.user_type_equipment IS NULL OR u.user_type_equipment <> 'SHARED')
+
+/* 🔥 FIX: เอา project ออก */
+LEFT JOIN IT_user_devices u 
+ON u.device_code = a.no_pc
+
 WHERE 1=1
 ";
 
 $params = [];
 
-if($search!=''){ //ฟิลเตอร์ค้นหา (รหัส, ผู้ใช้, โครงการ)
-    $sql.=" AND (a.no_pc LIKE ? OR u.user_employee LIKE ? OR a.project LIKE ?)";
+/* 🔍 SEARCH */
+if($search){
+    $sql.=" AND (
+        a.no_pc LIKE ? 
+        OR u.user_employee LIKE ? 
+        OR a.project LIKE ?
+    )";
     $params[]="%$search%";
     $params[]="%$search%";
     $params[]="%$search%";
 }
 
-if($type!=''){ //ฟิลเตอร์ประเภท (PC, Monitor, Printer, etc.)
+/* 🎯 FILTER */
+if($type){
     $sql.=" AND a.type_equipment=?";
     $params[]=$type;
 }
 
-if($proj!=''){ //ฟิลเตอร์โครงการ
+if($proj){
     $sql.=" AND a.project=?";
     $params[]=$proj;
 }
-if($status == 'used'){ //ฟิลเตอร์สถานะ (มีผู้ใช้)
-    $sql .= " AND u.user_employee IS NOT NULL";
+
+/* 🔥 STATUS */
+if($status=='used'){
+    $sql.=" AND u.user_employee IS NOT NULL";
+}
+if($status=='free'){
+    $sql.=" AND u.user_employee IS NULL";
 }
 
-if($status == 'free'){ //ฟิลเตอร์สถานะ (ยังไม่มีผู้ใช้)
-    $sql .= " AND u.user_employee IS NULL";
-}
-/* 🔥 filter grade */
-if($grade != ''){
-    $sql .= " AND a.device_grade = ?";
-    $params[] = $grade;
+/* 🔥 GRADE */
+if($grade){
+    $sql.=" AND a.device_grade=?";
+    $params[]=$grade;
 }
 
-$sql.=" ORDER BY a.project OFFSET $offset ROWS FETCH NEXT $limit ROWS ONLY"; //pagination แบบ SQL Server (ถ้า MySQL ใช้ LIMIT $offset, $limit)
+/* 🔥 PAGINATION */
+$sql.=" ORDER BY a.project OFFSET $offset ROWS FETCH NEXT $limit ROWS ONLY";
 
 $stmt=$conn->prepare($sql);
 $stmt->execute($params);
@@ -295,10 +188,10 @@ $data=$stmt->fetchAll(PDO::FETCH_ASSOC);
 
 include 'partials/header.php';
 include 'partials/sidebar.php';
+
+$role = $_SESSION['role_ivt'] ?? '';
 ?>
-<?php
-$role = $_SESSION['role_ivt'] ?? ''; // ดึง role จาก session
-?>
+
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 

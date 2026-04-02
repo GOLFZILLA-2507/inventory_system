@@ -253,6 +253,26 @@ data-type="<?= $d['type'] ?>">
 </div>
 </div>
 
+<div class="modal fade" id="successModal">
+<div class="modal-dialog modal-dialog-centered">
+<div class="modal-content shadow">
+
+<div class="modal-header bg-success text-white">
+<h5>สำเร็จ</h5>
+</div>
+
+<div class="modal-body text-center">
+✅ บันทึกเรียบร้อยแล้ว
+</div>
+
+<div class="modal-footer justify-content-center">
+<button class="btn btn-success" data-bs-dismiss="modal">ตกลง</button>
+</div>
+
+</div>
+</div>
+</div>
+
 <script>
 document.querySelectorAll(".openConfirm").forEach(btn=>{
 
@@ -263,9 +283,17 @@ document.querySelectorAll(".openConfirm").forEach(btn=>{
         let type = this.dataset.type;
 
         document.getElementById("confirmText").innerHTML =
-            `<b>${pc}</b><br>${type}`;
+            `<div class="fs-5">
+                📦 <b>${pc}</b><br>
+                <span class="text-muted">${type}</span>
+            </div>`;
 
-        document.getElementById("confirmBtn").onclick = function(){
+        // กันซ้อน event
+        let confirmBtn = document.getElementById("confirmBtn");
+        confirmBtn.onclick = null;
+
+        confirmBtn.onclick = function(){
+            confirmBtn.disabled = true; // กันกดซ้ำ
             form.submit();
         };
 
@@ -274,5 +302,21 @@ document.querySelectorAll(".openConfirm").forEach(btn=>{
 
 });
 </script>
+
+<?php if(isset($_GET['success'])): ?>
+<script>
+window.addEventListener('DOMContentLoaded', function(){
+
+    // 🔥 แสดง modal success
+    new bootstrap.Modal(document.getElementById('successModal')).show();
+
+    // 🔥 ล้าง ?success=1 ออกจาก URL (กันรีเฟรชแล้วขึ้นซ้ำ)
+    if(window.location.search.includes('success')){
+        window.history.replaceState({}, document.title, window.location.pathname);
+    }
+
+});
+</script>
+<?php endif; ?>
 
 <?php include 'partials/footer.php'; ?>
