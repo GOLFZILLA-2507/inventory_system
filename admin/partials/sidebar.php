@@ -37,6 +37,16 @@
                 <li class="nav-item">
                     <a class="nav-link" href="transfer_s_project.php">🚚 ส่งมอบอุปกรณ์</a>
                 </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="transfer_s_project_list.php">📦 รายการส่งอุปกรณ์</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="transfer_return.php">🔄 รับคืนอุปกรณ์</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="transferr_receive_list.php">📥 รายการที่ส่งมาหาฉัน</a>
+                </li>
+
 
                 <li class="nav-item">
                     <a class="nav-link" href="import_assets.php">

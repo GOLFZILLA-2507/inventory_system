@@ -47,14 +47,13 @@ a.spec,a.ram,a.ssd,a.gpu
 FROM IT_AssetTransfer_Headers t
 LEFT JOIN IT_assets a ON a.no_pc = t.no_pc
 WHERE t.to_site = ?
-AND t.receive_status != 'รับแล้ว'
+AND t.receive_status = 'รับแล้ว'
 
--- 🔥 เพิ่ม: ถ้ามี record ล่าสุดอยู่ที่ site ตัวเองแล้ว → ไม่ต้องแสดง
+-- เอาเฉพาะ record ล่าสุด
 AND NOT EXISTS (
     SELECT 1 FROM IT_AssetTransfer_Headers t2
     WHERE t2.no_pc = t.no_pc
     AND t2.to_site = ?
-    AND t2.receive_status = 'รับแล้ว'
     AND t2.transfer_id > t.transfer_id
 )
 ");
@@ -245,7 +244,7 @@ if($_SERVER['REQUEST_METHOD']=='POST'){
 <?php $i=1; foreach($assets as $a): 
 
 $isTransferring = ($a['transfer'] && 
-    $a['transfer']['receive_status']!='รับแล้ว' && 
+    $a['transfer']['receive_status']='รับแล้ว' && 
     $a['transfer']['receive_status']!='ยกเลิก');
 
 ?>
@@ -351,5 +350,4 @@ Swal.fire({icon:'error',title:'เกิดข้อผิดพลาด'});
 </script>
 <?php endif; ?>
 
-<?php include 'partials/footer.php'; ?>
 <?php include 'partials/footer.php'; ?>

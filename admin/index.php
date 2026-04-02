@@ -49,6 +49,7 @@ $total = $conn->query("
 SELECT COUNT(*) FROM IT_assets
 ")->fetchColumn();
 
+
 include 'partials/header.php';
 include 'partials/sidebar.php';
 ?>

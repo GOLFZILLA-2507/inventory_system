@@ -155,8 +155,20 @@ SELECT
     a.How_long2,
     a.device_grade,
     0 AS total_price
+
 FROM IT_AssetTransfer_Headers t
+
+-- 🔥 เอาเฉพาะ record ล่าสุดของแต่ละเครื่อง
+INNER JOIN (
+    SELECT no_pc, MAX(transfer_id) AS max_id
+    FROM IT_AssetTransfer_Headers
+    GROUP BY no_pc
+) latest 
+ON latest.no_pc = t.no_pc
+AND latest.max_id = t.transfer_id
+
 LEFT JOIN IT_assets a ON a.no_pc = t.no_pc
+
 WHERE t.to_site = ?
 AND t.receive_status = 'รับแล้ว'
 AND t.user_status IS NULL
