@@ -37,7 +37,8 @@ FORMAT(MIN(transfer_date),'yyyy-MM-dd HH:mm') AS transfer_date,
 COUNT(*) AS total_items,
 
 SUM(CASE WHEN receive_status='รับแล้ว' THEN 1 ELSE 0 END) AS received_items,
-SUM(CASE WHEN receive_status IS NULL THEN 1 ELSE 0 END) AS waiting_items
+SUM(CASE WHEN receive_status IS NULL THEN 1 ELSE 0 END) AS waiting_items,
+SUM(CASE WHEN receive_status='ไม่พบอุปกรณ์นี้' THEN 1 ELSE 0 END) AS notfound_items
 
 FROM IT_AssetTransfer_Headers
 WHERE from_site = ?
@@ -170,12 +171,38 @@ font-size:12px;
 
 <td>
 <?php
-if($d['received_items'] == $d['total_items']){
-    echo "<span class='badge bg-success badge-status'>✅ สำเร็จ</span>";
-}elseif($d['received_items'] > 0){
+
+$received = $d['received_items'];
+$notfound = $d['notfound_items'];
+$total    = $d['total_items'];
+
+/* =====================================================
+🔥 LOGIC ใหม่
+===================================================== */
+
+// 🟢 สำเร็จ (รวมไม่พบ = จบรอบ)
+if(($received + $notfound) == $total){
+
+    if($notfound > 0){
+        echo "<span class='badge bg-danger badge-status'>❌ ปลายทางไม่พบ</span>";
+    }else{
+        echo "<span class='badge bg-success badge-status'>✅ สำเร็จ</span>";
+    }
+
+}
+
+// 🟡 บางส่วน
+elseif($received > 0 || $notfound > 0){
+
     echo "<span class='badge bg-warning text-dark badge-status'>📦 บางส่วน</span>";
-}else{
+
+}
+
+// ⚪ ยังไม่รับ
+else{
+
     echo "<span class='badge bg-secondary badge-status'>⏳ รอรับ</span>";
+
 }
 ?>
 </td>

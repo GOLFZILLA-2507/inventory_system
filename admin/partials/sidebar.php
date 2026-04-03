@@ -1,70 +1,89 @@
-<?php $role = $_SESSION['role_ivt'] ?? ''; // กำหนดค่าเริ่มต้นเป็น 'user' หากไม่มี session ?>
+<?php $role = $_SESSION['role_ivt'] ?? ''; ?>
+
 <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
-    <div class="container-fluid">
+<div class="container-fluid">
 
-        <!-- โลโก้ -->
-        <a class="navbar-brand" href="index.php">🛠 IT Inventory System</a>
+<a class="navbar-brand" href="index.php">🛠 IT Inventory System</a>
 
-        <!-- ปุ่ม mobile -->
-        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#adminSidebar">
-            <span class="navbar-toggler-icon"></span>
-        </button>
+<button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#adminSidebar">
+<span class="navbar-toggler-icon"></span>
+</button>
 
-        <!-- เมนู -->
-        <div class="collapse navbar-collapse" id="adminSidebar">
-            <ul class="navbar-nav me-auto">
+<div class="collapse navbar-collapse" id="adminSidebar">
+<ul class="navbar-nav me-auto">
 
-                <!-- Dashboard (ทุก role เห็น) -->
-                <li class="nav-item">
-                    <a class="nav-link" href="index.php">🏠 Dashboard</a>
-                </li>
+<!-- Dashboard -->
+<li class="nav-item">
+<a class="nav-link" href="index.php">🏠 Dashboard</a>
+</li>
 
-                <?php if($role != 'MD'): ?>
-                <!-- 🔴 admin เท่านั้น -->
-                <li class="nav-item">
-                    <a class="nav-link" href="asset_add.php">➕ เพิ่มอุปกรณ์</a>
-                </li>
+<?php if($role != 'MD'): ?>
 
-                <li class="nav-item">
-                    <a class="nav-link" href="admin_add_project.php">➕ เพิ่มโครงการ</a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="admin_assign_userproject.php">🔄 กำหนดโครงการ</a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="admin_rental_price_manage.php">💰 จัดการราคาเช่า</a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="transfer_s_project.php">🚚 ส่งมอบอุปกรณ์</a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="transfer_s_project_list.php">📦 รายการส่งอุปกรณ์</a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="transfer_return.php">🔄 รับคืนอุปกรณ์</a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="transferr_receive_list.php">📥 รายการที่ส่งมาหาฉัน</a>
-                </li>
+<!-- 🔥 กลุ่ม 1: เพิ่มข้อมูล -->
+<li class="nav-item dropdown">
+<a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
+➕ เพิ่มข้อมูล
+</a>
+<ul class="dropdown-menu">
 
+<li><a class="dropdown-item" href="asset_add.php">💻 เพิ่มอุปกรณ์</a></li>
+<li><a class="dropdown-item" href="admin_add_project.php">🏗 เพิ่มโครงการ</a></li>
+<li><a class="dropdown-item" href="import_assets.php">📥 Import อุปกรณ์</a></li>
 
-                <li class="nav-item">
-                    <a class="nav-link" href="import_assets.php">
-                        💻 Import อุปกรณ์
-                    </a>
-                </li>
-                <?php endif; ?>
+</ul>
+</li>
 
-            </ul>
+<!-- 🔥 กลุ่ม 2: จัดการโครงการ -->
+<li class="nav-item dropdown">
+<a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
+🏢 จัดการโครงการ
+</a>
+<ul class="dropdown-menu">
 
-            <!-- ชื่อผู้ใช้ -->
-            <span class="navbar-text text-white">
-                <?= htmlspecialchars($_SESSION['fullname']) ?>
-                |
-                <a href="../" class="text-white text-decoration-underline">ออกจากระบบ</a>
-            </span>
-        </div>
-    </div>
+<li><a class="dropdown-item" href="admin_assign_userproject.php">🔄 กำหนดโครงการ</a></li>
+<li><a class="dropdown-item" href="admin_rental_price_manage.php">💰 จัดการราคาเช่า</a></li>
+
+</ul>
+</li>
+
+<!-- 🔥 กลุ่ม 3: ส่งอุปกรณ์ -->
+<li class="nav-item dropdown">
+<a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
+🚚 ส่งอุปกรณ์
+</a>
+<ul class="dropdown-menu">
+
+<li><a class="dropdown-item" href="transfer_s_project.php">📤 ส่งมอบอุปกรณ์</a></li>
+<li><a class="dropdown-item" href="transfer_s_project_list.php">📦 รายการส่งอุปกรณ์</a></li>
+<li><a class="dropdown-item" href="transfer_receive_check.php">📥 รายการที่ส่งมาหาฉัน</a></li>
+
+</ul>
+</li>
+
+<!-- 🔥 กลุ่ม 4: รับอุปกรณ์ 
+<li class="nav-item dropdown">
+<a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
+📥 รับอุปกรณ์
+</a>
+<ul class="dropdown-menu">
+
+<li><a class="dropdown-item" href="transfer_return.php">🔄 รับคืนอุปกรณ์</a></li>
+
+</ul>
+</li>
+-->
+<?php endif; ?>
+
+</ul>
+
+<!-- user -->
+<span class="navbar-text text-white">
+<?= htmlspecialchars($_SESSION['fullname']) ?> |
+<a href="../" class="text-white text-decoration-underline">ออกจากระบบ</a>
+</span>
+
+</div>
+</div>
 </nav>
 
 <div class="container-fluid mt-4">

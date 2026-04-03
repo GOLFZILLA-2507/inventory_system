@@ -21,26 +21,11 @@ $stmt->execute([$site]);
 $projects = $stmt->fetchAll(PDO::FETCH_COLUMN);
 
 /* =====================================================
-🔍 FUNCTION: ดึงสถานะล่าสุดของอุปกรณ์ (หัวใจ)
-===================================================== */
-function getTransferStatus($conn,$code){
-
-    $stmt = $conn->prepare("
-        SELECT TOP 1 to_site, receive_status
-        FROM IT_AssetTransfer_Headers
-        WHERE no_pc=?
-        ORDER BY transfer_id DESC
-    ");
-    $stmt->execute([$code]);
-
-    return $stmt->fetch(PDO::FETCH_ASSOC);
-}
-
-/* =====================================================
-📦 โหลด record ล่าสุดของแต่ละเครื่อง (สำคัญมาก)
+📦 โหลด "ล่าสุดจริง" ของแต่ละเครื่อง (หัวใจระบบ)
 ===================================================== */
 $stmt = $conn->prepare("
 SELECT 
+t.transfer_id,
 t.no_pc,
 t.type,
 t.from_site,
@@ -51,7 +36,7 @@ a.spec,a.ram,a.ssd,a.gpu
 FROM IT_AssetTransfer_Headers t
 LEFT JOIN IT_assets a ON a.no_pc = t.no_pc
 
--- 🔥 เอาเฉพาะ record ล่าสุดจริงของเครื่อง
+-- 🔥 เอาเฉพาะ record ล่าสุดของเครื่อง
 WHERE NOT EXISTS (
     SELECT 1 FROM IT_AssetTransfer_Headers t2
     WHERE t2.no_pc = t.no_pc
@@ -80,14 +65,7 @@ foreach($rows as $r){
 }
 
 /* =====================================================
-🔥 ใส่สถานะล่าสุด (สำหรับ UI + block)
-===================================================== */
-foreach($assets as $i => $a){
-    $assets[$i]['transfer'] = getTransferStatus($conn,$a['no_pc']);
-}
-
-/* =====================================================
-📨 SUBMIT (กัน F5)
+📨 SUBMIT (PRG กัน F5)
 ===================================================== */
 if($_SERVER['REQUEST_METHOD']=='POST'){
 
@@ -95,12 +73,14 @@ if($_SERVER['REQUEST_METHOD']=='POST'){
     $type  = $_POST['transfer_type'];
     $to    = $_POST['to_site'];
 
+    /* =====================================================
+    🔥 AUTO RULE: ส่งสำนักงานใหญ่
+    ===================================================== */
     $adminStatus = 'รออนุมัติ';
 
-    // 🔥 ส่งสำนักงานใหญ่ auto
     if($to === 'สำนักงานใหญ่'){
-        $type = 'ส่งคืน';
-        $adminStatus = 'อนุมัติ';
+        $type = 'ส่งคืน';        // 🔥 บังคับ type
+        $adminStatus = 'อนุมัติ'; // 🔥 auto approve
     }
 
     if(empty($items)){
@@ -124,25 +104,6 @@ if($_SERVER['REQUEST_METHOD']=='POST'){
 
         foreach($items as $code){
 
-            $t = getTransferStatus($conn,$code);
-
-            /* ================= BLOCK ================= */
-
-            // ❌ ไม่พบ → ห้ามส่ง
-            if($t && $t['receive_status']=='ไม่พบอุปกรณ์นี้'){
-                $conn->rollBack();
-                header("Location: transfer_create.php?notfound=1&pc=$code&to=".$t['to_site']);
-                exit;
-            }
-
-            // ❌ รอตรวจรับ → ห้ามส่ง
-            if($t && $t['receive_status']!='รับแล้ว' && $t['receive_status']!='ยกเลิก'){
-                $conn->rollBack();
-                header("Location: transfer_create.php?waiting=1&pc=$code&to=".$t['to_site']);
-                exit;
-            }
-
-            /* ================= INSERT ================= */
             $stmt->execute([
                 $round,
                 $type,
@@ -151,11 +112,12 @@ if($_SERVER['REQUEST_METHOD']=='POST'){
                 $user,
                 $adminStatus,
                 $code,
-                ''
+                $_POST['type_map'][$code] ?? ''
             ]);
         }
 
         $conn->commit();
+
         header("Location: transfer_create.php?success=1");
         exit;
 
@@ -178,6 +140,7 @@ if($_SERVER['REQUEST_METHOD']=='POST'){
 <div class="card-header bg-success text-white">
 🚚 สร้างรายการโอนย้าย
 </div>
+
 
 <div class="card-body">
 
@@ -222,11 +185,7 @@ if($_SERVER['REQUEST_METHOD']=='POST'){
 
 <?php $i=1; foreach($assets as $a): 
 
-$t = $a['transfer'] ?? null;
-
-$isNotFound = ($t && $t['receive_status']=='ไม่พบอุปกรณ์นี้');
-$isWaiting  = ($t && $t['receive_status']!='รับแล้ว' && $t['receive_status']!='ยกเลิก');
-
+$isWaiting = ($a['receive_status']=='รอตรวจรับ' || empty($a['receive_status']));
 ?>
 
 <tr class="<?= $isWaiting ? 'table-warning' : '' ?>">
@@ -237,28 +196,29 @@ $isWaiting  = ($t && $t['receive_status']!='รับแล้ว' && $t['receiv
 <input type="checkbox"
 name="asset_ids[]"
 value="<?= $a['no_pc'] ?>"
-<?= ($isNotFound || $isWaiting) ? 'disabled class="lock-item" data-site="'.$t['to_site'].'" data-status="'.$t['receive_status'].'"' : '' ?>
+<?= $isWaiting ? 'disabled class="waiting-item" data-site="'.$a['to_site'].'"' : '' ?>
 >
+
+<input type="hidden" name="type_map[<?= $a['no_pc'] ?>]" value="<?= $a['type'] ?>">
 </td>
 
 <td>
-<?php if($isNotFound): ?>
-<span class="badge bg-warning"><?= $a['to_site'] ?> : ไม่พบอุปกรณ์ </span>
-
-<?php elseif($isWaiting): ?>
-<span class="badge bg-warning">รอตรวจรับ</span>
-
-<?php elseif($t && $t['receive_status']=='ยกเลิก'): ?>
-<span class="badge bg-secondary">ยกเลิก</span>
-
+<?php if($isWaiting): ?>
+<span class="badge bg-warning text-dark">📥 รอตรวจรับ</span>
+<?php elseif($a['receive_status']=='ยกเลิก'): ?>
+<span class="badge bg-danger"></span>
 <?php else: ?>
-<span class="badge bg-primary">ปกติ</span>
+<span class="badge bg-secondary"></span>
 <?php endif; ?>
 </td>
 
 <td><?= $a['no_pc'] ?></td>
 <td><?= $a['type'] ?></td>
-<td><?= $a['spec'] ?? '-' ?></td>
+<td>
+<?= $a['spec']
+? $a['spec']." | ".$a['ram']." | ".$a['ssd']." | ".$a['gpu']
+: '-' ?>
+</td>
 
 </tr>
 
@@ -277,24 +237,26 @@ value="<?= $a['no_pc'] ?>"
 </div>
 
 <script>
-// confirm
-document.getElementById('btnConfirm').onclick=function(){
+// 🔥 modal confirm
+document.getElementById('btnConfirm').onclick = function(){
 
-let checked=document.querySelectorAll('input[name="asset_ids[]"]:checked');
+let checked = document.querySelectorAll('input[name="asset_ids[]"]:checked');
 
-if(checked.length===0){
-Swal.fire('เลือกอย่างน้อย 1 รายการ');
+if(checked.length === 0){
+Swal.fire('กรุณาเลือกอย่างน้อย 1 รายการ');
 return;
 }
 
-let list='';
-checked.forEach(el=> list+=el.value+'<br>');
+let list = '';
+checked.forEach(el=>{
+list += el.value + '<br>';
+});
 
-let to=document.getElementById('to_site').value;
+let to = document.getElementById('to_site').value;
 
 Swal.fire({
-title:'ยืนยันส่ง',
-html:`ไปที่ <b>${to}</b><hr>${list}`,
+title:'ยืนยันการโอน',
+html:`<b>ไปที่:</b> ${to}<br><hr>${list}`,
 icon:'question',
 showCancelButton:true
 }).then(res=>{
@@ -304,42 +266,30 @@ document.getElementById('formTransfer').submit();
 });
 };
 
-// 🔥 lock item modal
-document.querySelectorAll('.lock-item').forEach(el=>{
+// 🔥 เตือนรอตรวจรับ
+document.querySelectorAll('.waiting-item').forEach(el=>{
 el.closest('tr').onclick=function(e){
 if(e.target.tagName==='INPUT') return;
-
 Swal.fire({
 icon:'warning',
-title:'ไม่สามารถเลือกได้',
-html:`ส่งไปที่ <b>${el.dataset.site}</b><br>สถานะ: ${el.dataset.status}`
+title:'ยังโอนไม่ได้',
+text:'กำลังรอตรวจรับที่ '+el.dataset.site
 });
 };
 });
-</script>
 
+// 🔥 success
 <?php if(isset($_GET['success'])): ?>
-<script>Swal.fire('สำเร็จ','','success');</script>
+Swal.fire({
+icon:'success',
+title:'ส่งรายการเรียบร้อย'
+});
 <?php endif; ?>
 
-<?php if(isset($_GET['notfound'])): ?>
-<script>
-Swal.fire({
-icon:'error',
-title:'ไม่สามารถส่งได้',
-html:'อุปกรณ์ <?= $_GET['pc'] ?><br>ปลายทาง <?= $_GET['to'] ?><br>สถานะ: ไม่พบอุปกรณ์'
-});
-</script>
+// 🔥 error
+<?php if(isset($_GET['error'])): ?>
+Swal.fire({icon:'error',title:'เกิดข้อผิดพลาด'});
 <?php endif; ?>
-
-<?php if(isset($_GET['waiting'])): ?>
-<script>
-Swal.fire({
-icon:'warning',
-title:'ยังส่งไม่ได้',
-html:'อุปกรณ์ <?= $_GET['pc'] ?><br>กำลังรอตรวจรับที่ <?= $_GET['to'] ?>'
-});
 </script>
-<?php endif; ?>
 
 <?php include 'partials/footer.php'; ?>
