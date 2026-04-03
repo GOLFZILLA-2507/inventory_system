@@ -82,97 +82,121 @@ if(isset($_POST['confirm'])){
 
     $statusList = $_POST['status'] ?? [];
 
-    try{
-        $conn->beginTransaction();
+try{
+    $conn->beginTransaction();
 
-        foreach($data as $row){
+    foreach($data as $row){
 
-            $id = $row['transfer_id'];
+        $id = $row['transfer_id'];
 
-            // ❌ ถ้ารับแล้ว → ข้าม (กันยิงซ้ำ)
-            if($row['receive_status'] === 'รับแล้ว') continue;
+        // ❌ ถ้ารับแล้ว → ข้าม
+        if($row['receive_status'] === 'รับแล้ว') continue;
 
-            // ค่าที่ user เลือก
-            $statusVal = $statusList[$id] ?? '';
-            if($statusVal === '') continue;
+        $statusVal = $statusList[$id] ?? '';
+        if($statusVal === '') continue;
 
-            /* ===============================
-            ❌ ไม่พบอุปกรณ์
-            =============================== */
-            if($statusVal === 'ไม่พบอุปกรณ์นี้'){
+        /* ===============================
+        ❌ ไม่พบอุปกรณ์
+        =============================== */
+        if($statusVal === 'ไม่พบอุปกรณ์นี้'){
 
-                $conn->prepare("
-                UPDATE IT_AssetTransfer_Headers
-                SET receive_status='ไม่พบอุปกรณ์นี้'
-                WHERE transfer_id=?
-                ")->execute([$id]);
+            $conn->prepare("
+            UPDATE IT_AssetTransfer_Headers
+            SET receive_status='ไม่พบอุปกรณ์นี้'
+            WHERE transfer_id=?
+            ")->execute([$id]);
 
-                continue;
-            }
-
-            /* ===============================
-            ✅ รับแล้ว
-            =============================== */
-            if($statusVal === 'รับแล้ว'){
-
-    // 🔑 ต้องประกาศก่อนใช้
-    $device_code = $row['no_pc'];
-    $from        = $row['from_site'];
-
-    // 🔥 อัปเดตสถานะการรับ
-    $conn->prepare("
-    UPDATE IT_AssetTransfer_Headers
-    SET receive_status='รับแล้ว',
-        arrived_date = GETDATE()
-    WHERE transfer_id=?
-    ")->execute([$id]);
-
-    /* =====================================================
-    🔥 FIX: อัปเดตโครงการลง IT_assets (ตอนนี้จะทำงานแล้ว)
-    ===================================================== */
-    $conn->prepare("
-    UPDATE IT_assets
-    SET use_it = ?
-    WHERE no_pc = ?
-    ")->execute([
-        $site,
-        $device_code
-    ]);
-
-    /* =====================================================
-    🔥 ลบ user เดิม
-    ===================================================== */
-    $stmtDel = $conn->prepare("
-    SELECT TOP 1 id
-    FROM IT_user_devices
-    WHERE device_code=? AND user_project=?
-    ORDER BY id ASC
-    ");
-    $stmtDel->execute([$device_code, $from]);
-    $delRow = $stmtDel->fetch(PDO::FETCH_ASSOC);
-
-    if($delRow){
-        $conn->prepare("
-        DELETE FROM IT_user_devices
-        WHERE id=?
-        ")->execute([$delRow['id']]);
-    }
-}
+            continue;
         }
 
-        $conn->commit();
+        /* ===============================
+        ✅ รับแล้ว
+        =============================== */
+        if($statusVal === 'รับแล้ว'){
 
-        // 🔁 PRG: redirect เพื่อกัน refresh แล้วทำซ้ำ + modal ค้าง
-        header("Location: transfer_receive_detail.php?round=".$round."&success=1");
-        exit;
+            $device_code = $row['no_pc'];
+            $from        = $row['from_site'];
+            $type        = $row['type'];
 
-    }catch(Exception $e){
-        $conn->rollBack();
+            // 🔥 update header
+            $conn->prepare("
+            UPDATE IT_AssetTransfer_Headers
+            SET receive_status='รับแล้ว',
+                arrived_date = GETDATE()
+            WHERE transfer_id=?
+            ")->execute([$id]);
 
-        header("Location: transfer_receive_detail.php?round=".$round."&error=1");
-        exit;
+            // 🔥 update asset
+            $conn->prepare("
+            UPDATE IT_assets
+            SET use_it = ?
+            WHERE no_pc = ?
+            ")->execute([
+                $site,
+                $device_code
+            ]);
+
+            // 🔥 ลบ user เดิม (ยกเว้น HQ)
+            if($from !== 'สำนักงานใหญ่'){
+
+                $stmtDel = $conn->prepare("
+                SELECT TOP 1 id
+                FROM IT_user_devices
+                WHERE device_code=? AND user_project=?
+                ");
+                $stmtDel->execute([$device_code, $from]);
+                $delRow = $stmtDel->fetch(PDO::FETCH_ASSOC);
+
+                if($delRow){
+                    $conn->prepare("
+                    DELETE FROM IT_user_devices
+                    WHERE id=?
+                    ")->execute([$delRow['id']]);
+                }
+            }
+
+            // 🔥 insert device (ไม่มี user)
+            $conn->prepare("
+            INSERT INTO IT_user_devices
+            (user_employee,user_project,device_type,device_role,device_code,created_by,user_record)
+            VALUES (?,?,?,?,?,?,?)
+            ")->execute([
+                NULL,
+                $site,
+                $type,
+                'stock',
+                $device_code,
+                $user,
+                $user
+            ]);
+
+            // 🔥 insert history (เริ่มค่าเช่า)
+            $conn->prepare("
+            INSERT INTO IT_user_history
+            (user_employee,user_project,user_no_pc,action_type,created_at,created_by,history_type,start_date)
+            VALUES (?,?,?,'receive_stock',GETDATE(),?,?,GETDATE())
+            ")->execute([
+                NULL,
+                $site,
+                $device_code,
+                $user,
+                $type
+            ]);
+        }
     }
-}
+
+    $conn->commit();
+
+    header("Location: transfer_receive_detail.php?round=".$round."&success=1");
+    exit;
+
+}catch(Exception $e){
+
+    $conn->rollBack();
+
+    header("Location: transfer_receive_detail.php?round=".$round."&error=1");
+    exit;
+}}
 ?>
 
 <?php include 'partials/header.php'; ?>

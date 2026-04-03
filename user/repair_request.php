@@ -26,18 +26,17 @@ if($_SERVER['REQUEST_METHOD']=='POST'){
     $asset_id = $_POST['asset_id'] ?? '';
     $problem  = trim($_POST['problem'] ?? '');
 
-    /* ===== VALIDATE ===== */
     if(empty($asset_id)){
-        $msg = "❌ กรุณาเลือกอุปกรณ์";
+        $msg = "กรุณาเลือกอุปกรณ์";
         $status = "error";
     }
     elseif(empty($problem)){
-        $msg = "❌ กรุณากรอกอาการเสีย";
+        $msg = "กรุณากรอกอาการเสีย";
         $status = "error";
     }
     else{
 
-        /* ===== เช็คซ้ำ ===== */
+        /* 🔥 กันซ่อมซ้ำ */
         $stmtCheck = $conn->prepare("
         SELECT TOP 1 status 
         FROM IT_RepairTickets
@@ -48,7 +47,7 @@ if($_SERVER['REQUEST_METHOD']=='POST'){
         $dupRepair = $stmtCheck->fetch(PDO::FETCH_ASSOC);
 
         if($dupRepair){
-            $msg = "❌ อุปกรณ์นี้อยู่ในสถานะ '{$dupRepair['status']}' ไม่สามารถแจ้งซ่อมซ้ำได้";
+            $msg = "อุปกรณ์นี้กำลังซ่อมอยู่";
             $status = "error";
         }
         else{
@@ -56,18 +55,12 @@ if($_SERVER['REQUEST_METHOD']=='POST'){
             $uploadDir = "../uploads/repair/";
             $img1="";
 
-            /* ===== Upload รูป ===== */
             if(!empty($_FILES['images']['name'][0])){
-
                 for($i=0;$i<3;$i++){
-
                     if(!empty($_FILES['images']['name'][$i])){
-
                         $ext = pathinfo($_FILES['images']['name'][$i], PATHINFO_EXTENSION);
                         $filename = uniqid()."_".$i.".".$ext;
-
                         move_uploaded_file($_FILES['images']['tmp_name'][$i],$uploadDir.$filename);
-
                         if($i==0) $img1=$filename;
                     }
                 }
@@ -105,16 +98,17 @@ if($_SERVER['REQUEST_METHOD']=='POST'){
 }
 
 /* ======================================================
-🔥 โหลดอุปกรณ์
+🔥 โหลดอุปกรณ์ (NEW LOGIC)
 ====================================================== */
 $stmt = $conn->prepare("
 SELECT 
-d.device_code,
-d.device_type,
-a.spec,
-a.ram,
-a.ssd,
-a.gpu
+    d.device_code,
+    d.device_type,
+    d.user_employee,
+    a.spec,
+    a.ram,
+    a.ssd,
+    a.gpu
 FROM IT_user_devices d
 LEFT JOIN IT_assets a ON a.no_pc = d.device_code
 WHERE d.user_project = ?
@@ -122,25 +116,14 @@ WHERE d.user_project = ?
 $stmt->execute([$userProject]);
 $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-/* filter transfer */
-$stmtT = $conn->prepare("
-SELECT no_pc FROM IT_AssetTransfer_Headers
-WHERE from_site = ? AND receive_status = 'รับแล้ว'
-");
-$stmtT->execute([$userProject]);
-
-$transfered = array_map('trim',$stmtT->fetchAll(PDO::FETCH_COLUMN));
-
 $assets = [];
 
 foreach($rows as $r){
-
-    if(in_array(trim($r['device_code']),$transfered)) continue;
-
     $assets[] = [
         'asset_id' => $r['device_code'],
         'type' => $r['device_type'],
-        'spec' => trim(($r['spec'] ?? '')." | ".($r['ram'] ?? '')." | ".($r['ssd'] ?? '')." | ".($r['gpu'] ?? ''))
+        'spec' => trim(($r['spec'] ?? '')." | ".($r['ram'] ?? '')." | ".($r['ssd'] ?? '')." | ".($r['gpu'] ?? '')),
+        'is_free' => is_null($r['user_employee'])
     ];
 }
 
@@ -179,6 +162,7 @@ data-type="<?= $a['type'] ?>"
 <?= $isBusy ? 'disabled' : '' ?>
 >
 <?= $a['asset_id'] ?> | <?= $a['type'] ?>
+<?= $a['is_free'] ? ' (ไม่มีผู้ใช้)' : '' ?>
 <?= $isBusy ? ' (กำลังซ่อม)' : '' ?>
 </option>
 <?php endforeach; ?>
@@ -217,17 +201,20 @@ data-type="<?= $a['type'] ?>"
 </div>
 
 <script>
-/* auto fill */
 document.getElementById('assetSelect').addEventListener('change',function(){
 let opt=this.options[this.selectedIndex];
 document.getElementById('spec').value = opt.getAttribute('data-spec') || '';
 document.getElementById('type').value = opt.getAttribute('data-type') || '';
 });
 
-/* confirm + validate */
+/* 🔥 CONFIRM MODAL */
 document.getElementById('btnConfirm').addEventListener('click',function(){
 
-let asset = document.getElementById('assetSelect').value;
+let select = document.getElementById('assetSelect');
+let opt = select.options[select.selectedIndex];
+
+let asset = select.value;
+let type = opt.getAttribute('data-type');
 let problem = document.querySelector('[name="problem"]').value.trim();
 
 if(!asset){
@@ -241,12 +228,18 @@ if(!problem){
 }
 
 Swal.fire({
-title:'ยืนยัน?',
-text:'ต้องการแจ้งซ่อมใช่หรือไม่',
+title:'ยืนยันการแจ้งซ่อม',
+html:`
+<b>อุปกรณ์:</b> ${asset}<br>
+<b>ประเภท:</b> ${type}<br><br>
+ยืนยันหรือไม่ ?
+`,
 icon:'question',
 showCancelButton:true,
-confirmButtonText:'ส่ง',
-cancelButtonText:'ยกเลิก'
+confirmButtonText:'✅ ยืนยัน',
+cancelButtonText:'❌ ยกเลิก',
+confirmButtonColor:'#198754',
+cancelButtonColor:'#dc3545'
 }).then((res)=>{
 if(res.isConfirmed){
 document.getElementById('repairForm').submit();
@@ -258,14 +251,17 @@ document.getElementById('repairForm').submit();
 
 <?php if($msg): ?>
 <script>
+window.onload = function(){
 Swal.fire({
 icon:'<?= $status ?>',
-title:'<?= $msg ?>'
+title:'<?= $status=="success"?"สำเร็จ":"ผิดพลาด" ?>',
+text:'<?= $msg ?>'
 }).then(()=>{
 <?php if($status=='success'): ?>
 window.location='repair_status.php';
 <?php endif; ?>
 });
+}
 </script>
 <?php endif; ?>
 

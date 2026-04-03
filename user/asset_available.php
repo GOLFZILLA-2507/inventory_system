@@ -5,6 +5,8 @@ require_once '../config/checklogin.php';
 $site = $_SESSION['site'];
 $user = $_SESSION['fullname'];
 
+
+
 /* =====================================================
 🔥 FUNCTION: เช็คซ้ำทั้งระบบ
 ===================================================== */
@@ -59,85 +61,133 @@ function saveHistory($conn,$site,$code,$type,$user){
 /* =====================================================
 🔥 SUBMIT (หัวใจหลัก)
 ===================================================== */
+/* =====================================================
+🔥 SUBMIT (หัวใจหลัก - UPDATE user_employee)
+===================================================== */
 if($_SERVER['REQUEST_METHOD']=='POST'){
 
-    $transfer_id = $_POST['transfer_id'] ?? '';
-    $no_pc       = $_POST['no_pc'] ?? '';
-    $type        = $_POST['type'] ?? '';
+    $no_pc = trim($_POST['no_pc'] ?? '');
+    $type  = $_POST['type'] ?? '';
 
     if(!$no_pc){
         die("ไม่พบรหัสอุปกรณ์");
     }
 
-    // 🔥 เช็คซ้ำก่อนทุกครั้ง
-    $dup = checkDuplicate($conn,$no_pc);
+    try{
 
-    if($dup){
+        $conn->beginTransaction();
+
+        /* =====================================================
+        🔍 ดึงข้อมูลล่าสุด
+        ===================================================== */
+        $stmt = $conn->prepare("
+            SELECT TOP 1 id, user_employee, user_project
+            FROM IT_user_devices
+            WHERE device_code = ?
+        ");
+        $stmt->execute([$no_pc]);
+        $device = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if(!$device){
+            throw new Exception("ไม่พบอุปกรณ์ในระบบ");
+        }
+
+        /* =====================================================
+        🔥 เช็ค "ไม่มีรหัส"
+        ===================================================== */
+        $isNoCode = (
+            $no_pc == '-' ||
+            strtolower($no_pc) == 'n/a' ||
+            $no_pc == 'ไม่มีรหัส'
+        );
+
+        /* =====================================================
+        🚫 ถ้ามี user แล้ว → ห้ามใช้
+        ===================================================== */
+        if(!$isNoCode && !empty($device['user_employee'])){
+            throw new Exception("อุปกรณ์นี้ถูกใช้งานโดย {$device['user_employee']} ({$device['user_project']})");
+        }
+
+        /* =====================================================
+        🔥 UPDATE user_employee (หัวใจสำคัญ)
+        ===================================================== */
+        $stmtUpdate = $conn->prepare("
+            UPDATE IT_user_devices
+            SET 
+                user_employee = ?,     -- 🔥 จุดที่คุณต้องการ
+                device_role = 'shared',
+                created_by = ?
+            WHERE device_code = ?
+            AND (user_employee IS NULL OR ? = 1)
+        ");
+
+        $stmtUpdate->execute([
+            $site,             // 🔥 ใส่ชื่อ user
+            $user,
+            $no_pc,
+            $isNoCode ? 1 : 0
+        ]);
+
+        if($stmtUpdate->rowCount() == 0){
+            throw new Exception("อุปกรณ์นี้ถูกใช้ไปแล้ว (refresh ใหม่)");
+        }
+
+        /* =====================================================
+        🔥 UPDATE HISTORY (ตัวสำคัญ)
+        ===================================================== */
+        $stmtHistory = $conn->prepare("
+            UPDATE IT_user_history
+            SET 
+                user_employee = ?,      -- 🔥 โครงการ
+                user_project  = ?,      -- 🔥 โครงการ
+                created_by    = ?
+            WHERE user_no_pc = ?
+            AND end_date IS NULL       -- 🔥 เอา record ล่าสุดเท่านั้น
+        ");
+
+        $stmtHistory->execute([
+            $site,     // 🔥 project
+            $site,
+            $user,
+            $no_pc
+        ]);
+
+        $conn->commit();
+
+        header("Location: asset_available.php?success=1");
+        exit;
+
+    }catch(Exception $e){
+
+        $conn->rollBack();
+
         echo "<script>
-        alert('❌ อุปกรณ์ซ้ำ\\nใช้โดย {$dup['user_employee']} ({$dup['user_project']})');
+        alert('❌ ".$e->getMessage()."');
         history.back();
         </script>";
         exit;
     }
-
-    /* =====================================================
-    🔥 แยกประเภท (สำคัญมาก)
-    ===================================================== */
-    $mainTypes = ['PC','Notebook','All_In_One','Monitor','UPS'];
-
-    /* =====================================================
-    🔴 CASE 1: อุปกรณ์หลัก → ไปหน้า assign user
-    ===================================================== */
-    if(in_array($type,$mainTypes)){
-
-        header("Location: asset_assign_user.php?no_pc=".$no_pc."&type=".$type."&transfer_id=".$transfer_id);
-        exit;
-    }
-
-    /* =====================================================
-    🟢 CASE 2: อุปกรณ์ใช้ร่วม → บันทึกทันที
-    ===================================================== */
-    else{
-
-        // 🔥 insert ลง IT_user_devices
-        insertShared($conn,$site,$type,$no_pc,$user);
-
-        // 🔥 บันทึก history
-        saveHistory($conn,$site,$no_pc,$type,$user);
-
-        // 🔥 update transfer
-        $conn->prepare("
-            UPDATE IT_AssetTransfer_Headers
-            SET user_status=?
-            WHERE transfer_id=?
-        ")->execute([$site,$transfer_id]);
-
-        header("Location: asset_available.php?success=1");
-        exit;
-    }
 }
+
 
 /* =====================================================
 🔥 โหลดรายการอุปกรณ์
 ===================================================== */
 $stmt = $conn->prepare("
 SELECT
-t.transfer_id,
-t.no_pc,
-ISNULL(t.type, a.type_equipment) AS type,  -- 🔥 กัน null
+d.id,
+d.device_code AS no_pc,
+d.device_type AS type,
 a.spec,a.ram,a.ssd,a.gpu,
-t.from_site,
-t.transfer_type,
-t.arrived_date
+d.created_at
 
-FROM IT_AssetTransfer_Headers t
-LEFT JOIN IT_assets a ON a.no_pc = t.no_pc
+FROM IT_user_devices d
+LEFT JOIN IT_assets a ON a.no_pc = d.device_code
 
-WHERE t.to_site = ?
-AND t.receive_status = 'รับแล้ว'
-AND t.user_status IS NULL
+WHERE d.user_employee IS NULL   -- 🔥 ไม่มีผู้ใช้
+AND d.user_project = ?          -- 🔥 ของโครงการเรา
 
-ORDER BY t.arrived_date DESC
+ORDER BY d.created_at DESC
 ");
 
 $stmt->execute([$site]);
@@ -196,8 +246,9 @@ $mainTypes = ['PC','Notebook','All_In_One','Monitor','UPS'];
 
 <?php if(in_array($d['type'],$mainTypes)): ?>
 
+
 <!-- 🔴 อุปกรณ์หลัก -->
-<a href="asset_assign_user.php?no_pc=<?= $d['no_pc'] ?>&type=<?= $d['type'] ?>&transfer_id=<?= $d['transfer_id'] ?>"
+<a href="asset_assign_user.php?no_pc=<?= $d['no_pc'] ?>&type=<?= $d['type'] ?>"
 class="btn btn-primary btn-sm">
 👤 เพิ่มผู้ใช้
 </a>
@@ -207,7 +258,6 @@ class="btn btn-primary btn-sm">
 <!-- 🟢 อุปกรณ์ใช้ร่วม -->
 <form method="post" class="d-inline">
 
-<input type="hidden" name="transfer_id" value="<?= $d['transfer_id'] ?>">
 <input type="hidden" name="no_pc" value="<?= $d['no_pc'] ?>">
 <input type="hidden" name="type" value="<?= $d['type'] ?>">
 

@@ -6,7 +6,7 @@ $user = $_SESSION['fullname'];
 $site = $_SESSION['site'];
 
 /* =====================================================
-🔐 TOKEN กันยิงซ้ำ (F5 / Back / Spam)
+🔐 TOKEN กันยิงซ้ำ
 ===================================================== */
 if(empty($_SESSION['form_token'])){
     $_SESSION['form_token'] = bin2hex(random_bytes(32));
@@ -20,10 +20,10 @@ SELECT DISTINCT site FROM Employee WHERE site IS NOT NULL ORDER BY site
 ")->fetchAll(PDO::FETCH_COLUMN);
 
 /* =====================================================
-📦 โหลดอุปกรณ์
+📦 โหลดอุปกรณ์ (เพิ่ม use_it)
 ===================================================== */
 $stmt = $conn->query("
-SELECT no_pc,type_equipment,spec,ram,ssd,gpu
+SELECT no_pc,type_equipment,spec,ram,ssd,gpu,use_it
 FROM IT_assets
 WHERE no_pc IS NOT NULL
 ");
@@ -40,7 +40,6 @@ while($r = $stmt->fetch(PDO::FETCH_ASSOC)){
     $grouped[$type][] = $r;
 }
 
-/* 🔥 sort */
 uksort($grouped,function($a,$b) use ($priority){
     $pa = array_search($a,$priority);
     $pb = array_search($b,$priority);
@@ -86,9 +85,16 @@ if($_SERVER['REQUEST_METHOD']=='POST'){
 
         foreach($items as $pc){
 
-            /* =====================================================
-            🔥 NEW: เช็คสถานะล่าสุดก่อนส่ง
-            ===================================================== */
+            /* 🔥 CHECK use_it */
+            $checkUse = $conn->prepare("SELECT use_it FROM IT_assets WHERE no_pc=?");
+            $checkUse->execute([$pc]);
+            $useSite = $checkUse->fetchColumn();
+
+            if(!empty($useSite)){
+                throw new Exception("USED_{$pc}_{$useSite}");
+            }
+
+            /* 🔥 CHECK TRANSFER */
             $chk = $conn->prepare("
             SELECT TOP 1 receive_status, to_site
             FROM IT_AssetTransfer_Headers
@@ -101,14 +107,11 @@ if($_SERVER['REQUEST_METHOD']=='POST'){
             $lastStatus = $last['receive_status'] ?? null;
             $lastSite   = $last['to_site'] ?? '';
 
-            // ❌ ถ้ายังไม่จบ (รอตรวจรับ / อะไรก็แล้วแต่)
             if($lastStatus && $lastStatus != 'รับแล้ว' && $lastStatus != 'ยกเลิก'){
                 throw new Exception("BLOCK_{$pc}_{$lastSite}");
             }
 
-            /* =====================================================
-            🔥 type จริง
-            ===================================================== */
+            /* 🔥 TYPE */
             $typeStmt = $conn->prepare("SELECT type_equipment FROM IT_assets WHERE no_pc=?");
             $typeStmt->execute([$pc]);
             $realType = $typeStmt->fetchColumn() ?: 'UNKNOWN';
@@ -126,29 +129,31 @@ if($_SERVER['REQUEST_METHOD']=='POST'){
         }
 
         $conn->commit();
-        header("Location: transfer_s_project.php?success=1");
+
+        /* 🔥 redirect ใหม่ */
+        header("Location: transfer_s_project_list.php?success=1");
         exit;
 
-}catch(Exception $e){
+    }catch(Exception $e){
 
-    $conn->rollBack();
+        $conn->rollBack();
 
-    /* 🔥 แยก error */
-    if(strpos($e->getMessage(),'BLOCK_') === 0){
+        if(strpos($e->getMessage(),'USED_') === 0){
+            $msg = str_replace('USED_','',$e->getMessage());
+            list($pc,$siteBlock) = explode('_',$msg);
+            header("Location: transfer_s_project.php?error=used&pc=".$pc."&site=".$siteBlock);
+        }
+        elseif(strpos($e->getMessage(),'BLOCK_') === 0){
+            $msg = str_replace('BLOCK_','',$e->getMessage());
+            list($pc,$siteBlock) = explode('_',$msg);
+            header("Location: transfer_s_project.php?error=duplicate_item&pc=".$pc."&site=".$siteBlock);
+        }
+        else{
+            header("Location: transfer_s_project.php?error=fail");
+        }
 
-        $msg = str_replace('BLOCK_','',$e->getMessage());
-        list($pc,$siteBlock) = explode('_',$msg);
-
-        header("Location: transfer_s_project.php?error=duplicate_item&pc=".$pc."&site=".$siteBlock);
-
-    }else{
-
-        header("Location: transfer_s_project.php?error=fail");
-
+        exit;
     }
-
-    exit;
-}
 }
 ?>
 
@@ -160,7 +165,6 @@ if($_SERVER['REQUEST_METHOD']=='POST'){
 <style>
 body{
     background:linear-gradient(135deg,#e3f2fd,#ffffff);
-    font-family:'Sarabun';
 }
 .card-header{
     background:linear-gradient(135deg,#2196f3,#64b5f6);
@@ -180,7 +184,10 @@ body{
     padding:6px 12px;
     border-radius:20px;
     margin:4px;
-    font-size:13px;
+}
+select option:disabled{
+    color:#999;
+    background:#eee;
 }
 </style>
 
@@ -222,10 +229,21 @@ body{
 
 <select class="form-control mt-2 selectItem">
 <option value="">-- เลือก <?= $type ?> --</option>
-<?php foreach($items as $a): ?>
-<option value="<?= $a['no_pc'] ?>">
+
+<?php foreach($items as $a): 
+$disabled = !empty($a['use_it']);
+?>
+
+<option value="<?= $a['no_pc'] ?>" <?= $disabled?'disabled':'' ?>>
+
 <?= $a['no_pc'] ?> | <?= $a['spec'] ?>
+
+<?php if($disabled): ?>
+(อยู่ที่ <?= $a['use_it'] ?>)
+<?php endif; ?>
+
 </option>
+
 <?php endforeach; ?>
 </select>
 
@@ -244,16 +262,22 @@ body{
 </div>
 
 <script>
-/* ================= ADD ================= */
+let isSubmitting=false;
+
 document.querySelectorAll('.group-box').forEach(box=>{
 let select = box.querySelector('.selectItem');
 let list   = box.querySelector('.selectedList');
 
 box.querySelector('.btnAdd').onclick=function(){
+
 let val = select.value;
 let text = select.options[select.selectedIndex].text;
 
 if(!val){ Swal.fire('กรุณาเลือกก่อน'); return; }
+
+if(select.options[select.selectedIndex].disabled){
+Swal.fire('❌ อุปกรณ์นี้ถูกใช้งานอยู่'); return;
+}
 
 if(list.querySelector('[data-id="'+val+'"]')){
 Swal.fire('เลือกแล้ว'); return;
@@ -262,14 +286,12 @@ Swal.fire('เลือกแล้ว'); return;
 let tag = document.createElement('div');
 tag.className='tag';
 tag.dataset.id=val;
-tag.innerHTML=text+' <span style="cursor:pointer">✖</span>';
-tag.querySelector('span').onclick=()=>tag.remove();
+tag.innerHTML=text+' ✖';
+tag.onclick=()=>tag.remove();
+
 list.appendChild(tag);
 };
 });
-
-/* ================= SUBMIT ================= */
-let isSubmitting=false;
 
 document.getElementById('btnSend').onclick=function(){
 
@@ -279,35 +301,16 @@ let to = document.getElementById('toSite').value;
 if(!to){ Swal.fire('กรุณาเลือกโครงการ'); return; }
 
 let items=[];
-let grouped={};
-
 document.querySelectorAll('.tag').forEach(t=>{
-let code = t.dataset.id;
-let type = t.closest('.group-box').querySelector('b').innerText;
-
-if(!grouped[type]) grouped[type]=[];
-grouped[type].push(code);
-
-items.push(code);
+items.push(t.dataset.id);
 });
 
 if(items.length==0){
 Swal.fire('กรุณาเลือกอุปกรณ์'); return;
 }
 
-/* 🔥 confirm */
-let html = `<div style="text-align:left"><b>📍 ${to}</b><hr>`;
-for(let t in grouped){
-html += `<b>${t}</b><ul>`;
-grouped[t].forEach(i=> html+=`<li>${i}</li>`);
-html += `</ul>`;
-}
-html += `</div>`;
-
 Swal.fire({
-title:'ยืนยันส่งอุปกรณ์',
-html:html,
-width:'850px',
+title:'ยืนยันส่ง?',
 icon:'question',
 showCancelButton:true
 }).then(res=>{
@@ -331,21 +334,12 @@ form.submit();
 });
 };
 
-/* ================= RESULT ================= */
-<?php if(isset($_GET['success'])): ?>
-Swal.fire({icon:'success',title:'ส่งสำเร็จ 🎉'});
-<?php endif; ?>
-
-<?php if(isset($_GET['error']) && $_GET['error']=='duplicate_item'): ?>
+<?php if(isset($_GET['error']) && $_GET['error']=='used'): ?>
 Swal.fire({
 icon:'warning',
-title:'อุปกรณ์ถูกโอนอยู่',
-text:'<?= $_GET['pc'] ?> ถูกส่งไปที่ <?= $_GET['site'] ?> และยังรอตรวจรับ'
+title:'อุปกรณ์ถูกใช้งาน',
+text:'<?= $_GET['pc'] ?> อยู่ที่ <?= $_GET['site'] ?>'
 });
-<?php endif; ?>
-
-<?php if(isset($_GET['error']) && $_GET['error']=='fail'): ?>
-Swal.fire({icon:'error',title:'เกิดข้อผิดพลาด'});
 <?php endif; ?>
 </script>
 

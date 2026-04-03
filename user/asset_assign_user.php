@@ -6,86 +6,88 @@ $site = $_SESSION['site'];
 $loginUser = $_SESSION['fullname'];
 
 /* =====================================================
-🔥 FUNCTION: เช็คซ้ำทั้งระบบ
+🔥 FUNCTION
 ===================================================== */
-function checkDuplicate($conn,$code){
+
+function countRole($conn,$emp,$role,$site){
     $stmt = $conn->prepare("
-        SELECT TOP 1 user_employee,user_project
+        SELECT COUNT(*) 
         FROM IT_user_devices
-        WHERE device_code=?
+        WHERE user_employee=?
+        AND device_role=?
+        AND user_project=?
+    ");
+    $stmt->execute([$emp,$role,$site]);
+    return $stmt->fetchColumn();
+}
+
+function hasMain($conn,$emp,$site){
+    return countRole($conn,$emp,'main',$site);
+}
+
+function countMonitor($conn,$emp,$site){
+    $stmt = $conn->prepare("
+        SELECT COUNT(*) 
+        FROM IT_user_devices
+        WHERE user_employee=?
+        AND device_role IN ('monitor1','monitor2')
+        AND user_project=?
+    ");
+    $stmt->execute([$emp,$site]);
+    return $stmt->fetchColumn();
+}
+
+function countUPS($conn,$emp,$site){
+    return countRole($conn,$emp,'ups',$site);
+}
+
+function hasAny($conn,$emp,$site){
+    $stmt = $conn->prepare("
+        SELECT COUNT(*) 
+        FROM IT_user_devices
+        WHERE user_employee=?
+        AND user_project=?
+    ");
+    $stmt->execute([$emp,$site]);
+    return $stmt->fetchColumn();
+}
+
+function checkDuplicateDevice($conn,$code){
+
+    if($code == 'ไม่มีรหัสอุปกรณ์') return false;
+
+    $stmt = $conn->prepare("
+        SELECT TOP 1 user_project
+        FROM IT_user_devices
+        WHERE device_code = ?
+        AND user_employee IS NOT NULL
     ");
     $stmt->execute([$code]);
+
     return $stmt->fetch(PDO::FETCH_ASSOC);
 }
 
 /* =====================================================
-🔥 FUNCTION: นับจำนวนอุปกรณ์ user
+🔥 รับค่า (สำคัญ)
 ===================================================== */
-function countDevice($conn,$emp,$type){
-    $stmt = $conn->prepare("
-        SELECT COUNT(*) 
-        FROM IT_user_devices
-        WHERE user_employee=? AND device_type=?
-    ");
-    $stmt->execute([$emp,$type]);
-    return $stmt->fetchColumn();
-}
-
-/* =====================================================
-🔥 FUNCTION: insert device (1 row)
-===================================================== */
-function insertDevice($conn,$emp,$site,$type,$role,$code,$user){
-
-    $conn->prepare("
-        INSERT INTO IT_user_devices
-        (user_employee,user_project,device_type,device_role,device_code,created_by,user_record)
-        VALUES (?,?,?,?,?,?,?)
-    ")->execute([
-        $emp,
-        $site,
-        $type,
-        $role,
-        $code,
-        $user,
-        $user
-    ]);
-}
-
-/* =====================================================
-🔥 FUNCTION: save history
-===================================================== */
-function saveHistory($conn,$emp,$site,$code,$type,$user){
-
-    $conn->prepare("
-        INSERT INTO IT_user_history
-        (user_employee,user_project,user_no_pc,action_type,created_at,created_by,history_type,start_date)
-        VALUES (?,?,?,'assign_user',GETDATE(),?,?,GETDATE())
-    ")->execute([
-        $emp,
-        $site,
-        $code,
-        $user,
-        $type
-    ]);
-}
-
-/* =====================================================
-🔥 รับค่า
-===================================================== */
+$no_pc = $_GET['no_pc'] ?? ($_POST['no_pc'] ?? '');
 $transfer_id = $_GET['transfer_id'] ?? ($_POST['transfer_id'] ?? 0);
-$no_pc       = $_GET['no_pc'] ?? ($_POST['no_pc'] ?? '');
 
 /* =====================================================
-🔥 โหลด asset
+🔥 โหลด asset (แก้ใหม่ ใช้ no_pc)
 ===================================================== */
 $stmt = $conn->prepare("
-SELECT t.*, a.type_equipment
-FROM IT_AssetTransfer_Headers t
-LEFT JOIN IT_assets a ON a.no_pc = t.no_pc
-WHERE t.transfer_id = ?
+SELECT a.no_pc, a.type_equipment
+FROM IT_assets a
+WHERE a.no_pc = ?
 ");
-$stmt->execute([$transfer_id]);
+$stmt->execute([$no_pc]);
 $asset = $stmt->fetch(PDO::FETCH_ASSOC);
+
+/* 🔥 กันพัง */
+if(!$asset){
+    die("<script>alert('❌ ไม่พบอุปกรณ์นี้ในระบบ');history.back();</script>");
+}
 
 /* =====================================================
 🔥 โหลด user
@@ -110,90 +112,124 @@ if(isset($_POST['save'])){
         die("<script>alert('เลือกผู้ใช้');history.back();</script>");
     }
 
-    // 🔥 ไม่เช็คซ้ำ ถ้าเป็น "ไม่มีรหัสอุปกรณ์"
-    if($no_pc !== 'ไม่มีรหัสอุปกรณ์'){
-
-    $dup = checkDuplicate($conn,$no_pc);
-
+    /* 🔥 เช็คซ้ำ */
+    $dup = checkDuplicateDevice($conn,$no_pc);
     if($dup){
-        die("<script>alert('❌ ซ้ำกับ {$dup['user_employee']} ({$dup['user_project']})');history.back();</script>");
+        die("<script>alert('❌ รหัสนี้ซ้ำอยู่ที่โครงการ {$dup['user_project']}');history.back();</script>");
     }
-    }
 
-    /* =====================================================
-    🔥 TYPE LOGIC (หัวใจ)
-    ===================================================== */
+    try{
 
-    // 🟡 MONITOR
-    if($type == 'Monitor'){
+        $conn->beginTransaction();
 
-        $count = countDevice($conn,$user_employee,'Monitor');
+        /* =====================================================
+        🔥 TYPE LOGIC (ของจริง)
+        ===================================================== */
+        $hasAny  = hasAny($conn,$user_employee,$site);
+        $hasMain = hasMain($conn,$user_employee,$site);
 
-        if($count >= 2){
-            die("<script>alert('❌ จอครบแล้ว (2 จอ)');history.back();</script>");
+        if($hasAny == 0){
+            $role = 'main';
+        }
+        elseif($hasMain == 0){
+            $role = 'main';
+        }
+        else{
+
+            if($type == 'Monitor'){
+
+                if(countMonitor($conn,$user_employee,$site) >= 2){
+                    throw new Exception('❌ จอครบแล้ว (2 จอ)');
+                }
+
+                $role = (countMonitor($conn,$user_employee,$site) == 0)
+                        ? 'monitor1' : 'monitor2';
+            }
+
+            elseif($type == 'UPS'){
+
+                if(countUPS($conn,$user_employee,$site) >= 1){
+                    throw new Exception('❌ มี UPS แล้ว');
+                }
+
+                $role = 'ups';
+            }
+
+            elseif(in_array($type,['PC','Notebook'])){
+
+                if($hasMain >= 1){
+                    throw new Exception('❌ ผู้ใช้มีเครื่องหลักแล้ว');
+                }
+
+                $role = 'main';
+            }
+
+            else{
+                $role = 'device';
+            }
         }
 
-        $role = ($count == 0) ? 'monitor1' : 'monitor2';
+        /* =====================================================
+        🔥 UPDATE DEVICE
+        ===================================================== */
+        $stmt = $conn->prepare("
+            UPDATE IT_user_devices
+            SET 
+                user_employee = ?,
+                device_role   = ?,
+                user_project  = ?,
+                created_by    = ?
+            WHERE device_code = ?
+            AND user_employee IS NULL
+        ");
 
-        insertDevice($conn,$user_employee,$site,'Monitor',$role,$no_pc,$loginUser);
-        saveHistory($conn,$user_employee,$site,$no_pc,'Monitor',$loginUser);
-    }
-
-    // 🟣 UPS
-    elseif($type == 'UPS'){
-
-        if(countDevice($conn,$user_employee,'UPS') > 0){
-            die("<script>alert('❌ มี UPS แล้ว');history.back();</script>");
-        }
-
-        insertDevice($conn,$user_employee,$site,'UPS','ups',$no_pc,$loginUser);
-        saveHistory($conn,$user_employee,$site,$no_pc,'UPS',$loginUser);
-    }
-
-    // 🔵 PC / Notebook
-    else{
-
-        if(countDevice($conn,$user_employee,'PC') > 0){
-            die("<script>alert('❌ มีเครื่องแล้ว');history.back();</script>");
-        }
-
-        insertDevice($conn,$user_employee,$site,'PC','main',$no_pc,$loginUser);
-        saveHistory($conn,$user_employee,$site,$no_pc,'PC',$loginUser);
-    }
-
-    /* =====================================================
-    🔥 UPDATE IT_assets (เฉพาะมีรหัสจริง)
-    ===================================================== */
-
-    // ❌ ไม่ update ถ้าเป็น "ไม่มีรหัสอุปกรณ์"
-    if($no_pc !== 'ไม่มีรหัสอุปกรณ์'){
-
-        $conn->prepare("
-            UPDATE IT_assets
-            SET use_it = ?
-            WHERE no_pc = ?
-        ")->execute([
-            $site,     // 🔥 โครงการปัจจุบัน
+        $stmt->execute([
+            $user_employee,
+            $role,
+            $site,
+            $loginUser,
             $no_pc
         ]);
+
+        if($stmt->rowCount() == 0){
+            throw new Exception("❌ อุปกรณ์นี้ถูกใช้งานแล้ว");
+        }
+
+        /* =====================================================
+        🔥 HISTORY
+        ===================================================== */
+        $conn->prepare("
+            UPDATE IT_user_history
+            SET user_employee=?, user_project=?, created_by=?
+            WHERE user_no_pc=? AND end_date IS NULL
+        ")->execute([$user_employee,$site,$loginUser,$no_pc]);
+
+        /* =====================================================
+        🔥 ASSET
+        ===================================================== */
+        if($no_pc !== 'ไม่มีรหัสอุปกรณ์'){
+            $conn->prepare("
+                UPDATE IT_assets SET use_it=? WHERE no_pc=?
+            ")->execute([$site,$no_pc]);
+        }
+
+        $conn->commit();
+
+        header("Location: asset_available.php?success=1");
+        exit;
+
+    }catch(Exception $e){
+
+        $conn->rollBack();
+        echo "<script>alert('".$e->getMessage()."');history.back();</script>";
+        exit;
     }
-
-    /* =====================================================
-    🔥 UPDATE TRANSFER
-    ===================================================== */
-    $conn->prepare("
-        UPDATE IT_AssetTransfer_Headers
-        SET user_status=?
-        WHERE transfer_id=?
-    ")->execute([$user_employee,$transfer_id]);
-
-    header("Location: asset_available.php?success=1");
-    exit;
 }
+
+include 'partials/header.php';
+include 'partials/sidebar.php';
 ?>
 
-<?php include 'partials/header.php'; ?>
-<?php include 'partials/sidebar.php'; ?>
 
 <div class="container mt-4">
 <div class="card shadow">

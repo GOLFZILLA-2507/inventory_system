@@ -33,7 +33,7 @@ function getTransferStatus($conn,$code){
     ");
     $stmt->execute([$code]);
 
-    return $stmt->fetch(PDO::FETCH_ASSOC);
+    return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
 }
 
 /* =====================================================
@@ -41,40 +41,37 @@ function getTransferStatus($conn,$code){
 ===================================================== */
 $stmt = $conn->prepare("
 SELECT 
-t.no_pc,
-t.type,
-t.from_site,
-t.to_site,
-t.receive_status,
-a.spec,a.ram,a.ssd,a.gpu
+    d.device_code AS no_pc,
+    d.device_type AS type,
+    d.user_project,
+    d.user_employee,
 
-FROM IT_AssetTransfer_Headers t
-LEFT JOIN IT_assets a ON a.no_pc = t.no_pc
+    a.spec,
+    a.ram,
+    a.ssd,
+    a.gpu
 
--- 🔥 เอาเฉพาะ record ล่าสุดจริงของเครื่อง
-WHERE NOT EXISTS (
-    SELECT 1 FROM IT_AssetTransfer_Headers t2
-    WHERE t2.no_pc = t.no_pc
-    AND t2.transfer_id > t.transfer_id
-)
+FROM IT_user_devices d
+LEFT JOIN IT_assets a ON a.no_pc = d.device_code
 
--- 🔥 เอาเฉพาะของโครงการเรา
-AND t.from_site = ?
+WHERE d.user_project = ?
 ");
 $stmt->execute([$site]);
 $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-/* =====================================================
-🔥 FILTER ตาม requirement
-===================================================== */
 $assets = [];
 
 foreach($rows as $r){
 
-    $status = $r['receive_status'];
+    // 🔥 ดึงสถานะจาก transfer
+    $t = getTransferStatus($conn,$r['no_pc']);
 
-    // ❌ 1. รับแล้ว → ไม่แสดง
-    if($status === 'รับแล้ว') continue;
+    // 🔥 ใส่สถานะเข้าไปเลย
+    $r['transfer'] = $t;
+
+    // ❗ requirement ใหม่:
+    // ต้อง "เห็นเครื่องที่ถูกส่งด้วย"
+    // 👉 ดังนั้น "ไม่ต้อง filter ทิ้งแล้ว"
 
     $assets[] = $r;
 }

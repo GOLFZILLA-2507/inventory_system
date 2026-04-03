@@ -77,37 +77,49 @@ if($_SERVER['REQUEST_METHOD']=='POST'){
             /* ===============================
             ✅ รับ
             =============================== */
-            if($status == 'รับ'){
-
-                $conn->prepare("
-                UPDATE IT_AssetTransfer_Headers
-                SET receive_status='รับแล้ว',
-                    receive_date=GETDATE(),
-                    arrived_date=GETDATE()
-                WHERE transfer_id=?
-                ")->execute([$id]);
-
-                // 🔥 update asset
-                $conn->prepare("
-                UPDATE IT_assets
-                SET use_it=?
-                WHERE no_pc = (
-                    SELECT no_pc FROM IT_AssetTransfer_Headers WHERE transfer_id=?
-                )
-                ")->execute([$site,$id]);
-            }
+          if($status == 'รับ'){
 
             /* ===============================
-            ❌ ไม่พบ (แก้ใหม่)
+            ✅ UPDATE TRANSFER
             =============================== */
-            elseif($status == 'ไม่พบ'){
+            $conn->prepare("
+            UPDATE IT_AssetTransfer_Headers
+            SET receive_status='รับแล้ว',
+                receive_date=GETDATE(),
+                arrived_date=GETDATE()
+            WHERE transfer_id=?
+            ")->execute([$id]);
 
-                $conn->prepare("
-                UPDATE IT_AssetTransfer_Headers
-                SET receive_status='ไม่พบอุปกรณ์นี้'
-                WHERE transfer_id=?
-                ")->execute([$id]);
-            }
+            /* ===============================
+            🔥 ดึงข้อมูลเครื่อง
+            =============================== */
+            $stmtAsset = $conn->prepare("
+            SELECT no_pc
+            FROM IT_AssetTransfer_Headers
+            WHERE transfer_id=?
+            ");
+            $stmtAsset->execute([$id]);
+            $asset = $stmtAsset->fetch(PDO::FETCH_ASSOC);
+
+            $code = $asset['no_pc'];
+
+            /* ===============================
+            🔥 ลบออกจากระบบใช้งาน (สำคัญที่สุด)
+            =============================== */
+            $conn->prepare("
+            DELETE FROM IT_user_devices
+            WHERE device_code = ?
+            ")->execute([$code]);
+
+            /* ===============================
+            🔥 UPDATE ASSET → กลับคลัง
+            =============================== */
+            $conn->prepare("
+            UPDATE IT_assets
+            SET use_it = 'สำนักงานใหญ่'
+            WHERE no_pc = ?
+            ")->execute([$code]);
+        }
         }
 
         $conn->commit();

@@ -23,10 +23,9 @@ $transfered = array_map('trim',$stmtT->fetchAll(PDO::FETCH_COLUMN));
 // ไม่มีผู้ใช้
 $stmt1 = $conn->prepare("
 SELECT COUNT(*) 
-FROM IT_AssetTransfer_Headers
-WHERE to_site = ?
-AND receive_status = 'รับแล้ว'
-AND (user_status IS NULL OR user_status = '')
+FROM IT_user_devices
+WHERE user_employee IS NULL
+AND user_project = ?
 ");
 $stmt1->execute([$site]);
 $count_no_user = $stmt1->fetchColumn();
@@ -84,6 +83,7 @@ ON e.fullname = d.user_employee
 
 WHERE d.user_project = ?
 AND d.device_role != 'shared' /* ไม่เอาอุปกรณ์ใช้ร่วม */
+AND d.user_employee IS NOT NULL /* ไม่เอาอุปกรณ์ไม่มีผู้ใช้ */
 ORDER BY d.user_employee
 ");
 $stmt->execute([$site]);
@@ -96,7 +96,8 @@ $data = [];
 
 foreach($rows as $r){
 
-    $emp = $r['user_employee'];
+    $emp = trim($r['user_employee']);
+    if($emp == '' || is_null($emp)) continue;
 
     if(!isset($data[$emp])){
         $data[$emp] = [
@@ -109,28 +110,43 @@ foreach($rows as $r){
         ];
     }
 
-    // 🔵 PC
-    if($r['device_type'] == 'PC'){
-        $data[$emp]['PC'] = $r['device_code'];
+    /* ===============================
+    🔵 COMPUTER (PC / Notebook / AIO)
+    =============================== */
+    if(in_array($r['device_type'], ['PC','Notebook','All_In_One'])){
 
-        if(!empty($r['spec'])){
-            $data[$emp]['spec'] =
-                "{$r['spec']} | {$r['ram']} | {$r['ssd']} | {$r['gpu']}";
+        // 🔥 ถ้ามีหลายเครื่อง → เอาตัวแรก หรือจะ concat ก็ได้
+        if($data[$emp]['PC'] == ''){
+            $data[$emp]['PC'] = $r['device_code'];
+
+            if(!empty($r['spec'])){
+                $data[$emp]['spec'] =
+                    "{$r['spec']} | {$r['ram']} | {$r['ssd']} | {$r['gpu']}";
+            }
         }
     }
 
-    // 🟡 Monitor
+    /* ===============================
+    🟡 Monitor
+    =============================== */
     if($r['device_type'] == 'Monitor'){
-        if($r['device_role'] == 'monitor1'){
+
+        if($data[$emp]['Monitor1'] == ''){
             $data[$emp]['Monitor1'] = $r['device_code'];
-        }else{
+        }
+        elseif($data[$emp]['Monitor2'] == ''){
             $data[$emp]['Monitor2'] = $r['device_code'];
         }
     }
 
-    // 🟣 UPS
+    /* ===============================
+    🟣 UPS
+    =============================== */
     if($r['device_type'] == 'UPS'){
-        $data[$emp]['UPS'] = $r['device_code'];
+
+        if($data[$emp]['UPS'] == ''){
+            $data[$emp]['UPS'] = $r['device_code'];
+        }
     }
 }
 
