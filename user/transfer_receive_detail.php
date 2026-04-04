@@ -23,6 +23,8 @@ SELECT
     t.from_site,
     t.receive_status,
     t.admin_status,           -- 🔥 สำคัญ: ใช้เช็คอนุมัติ
+    t.other_detail,
+    t.transfer_image,
     a.spec,
     a.ram,
     a.ssd,
@@ -33,6 +35,31 @@ WHERE t.sent_transfer = ?
 ");
 $stmt->execute([$round]);
 $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+/* ===== 🔥 ใส่ตรงนี้ ===== */
+$headerDetail = '';
+$headerImages = [];
+
+foreach($data as $d){
+
+    // เอา detail แค่ตัวแรกที่มี
+    if(empty($headerDetail) && !empty($d['other_detail'])){
+        $headerDetail = $d['other_detail'];
+    }
+
+    // รวมรูปทั้งหมด
+    if(!empty($d['transfer_image'])){
+        // รองรับหลายรูป (คั่นด้วย ,)
+        $imgs = explode(',', $d['transfer_image']);
+        foreach($imgs as $img){
+            $headerImages[] = trim($img);
+        }
+    }
+}
+
+/* กันรูปซ้ำ */
+$headerImages = array_unique($headerImages);
+/* ===== 🔥 จบตรงนี้ ===== */
 
 /* =====================================================
 🔍 เช็คว่า “อนุมัติครบหรือยัง”
@@ -245,6 +272,36 @@ try{
 
 </div>
 
+<div class="card mb-3 border-success">
+
+<div class="card-body">
+
+<!-- รายละเอียด -->
+<div class="mb-3">
+<strong>รายละเอียด:</strong><br>
+<?= !empty($headerDetail) ? nl2br(htmlspecialchars($headerDetail)) : '-' ?>
+</div>
+
+<!-- รูป -->
+<div>
+<strong>รูปภาพ:</strong><br>
+
+<?php if(!empty($headerImages)): ?>
+
+    <img src="../uploads/transfer/<?= $headerImages[0] ?>"
+         style="width:120px;cursor:pointer"
+         onclick="openGallery(0)">
+
+<?php else: ?>
+    -
+<?php endif; ?>
+
+</div>
+
+</div>
+</div>
+
+
 <form method="post" id="mainForm">
 <input type="hidden" name="round" value="<?= htmlspecialchars($round) ?>">
 
@@ -353,6 +410,26 @@ echo empty($specParts) ? '-' : implode(' | ',$specParts);
 </div>
 </div>
 
+<!-- IMAGE MODAL -->
+<div class="modal fade" id="imgModal">
+<div class="modal-dialog modal-lg modal-dialog-centered">
+<div class="modal-content">
+
+<div class="modal-body text-center">
+
+<img id="imgPreview" style="width:100%;max-height:70vh;object-fit:contain">
+
+<div class="mt-2">
+<button class="btn btn-success btn-sm" onclick="prevImg()">⬅</button>
+<button class="btn btn-success btn-sm" onclick="nextImg()">➡</button>
+</div>
+
+</div>
+
+</div>
+</div>
+</div>
+
 <script>
 /* =====================================================
 📊 สรุปรายการก่อนกดยืนยัน
@@ -390,6 +467,29 @@ btnBlock.onclick = function(){
     });
 };
 }
+/* รูปภาพ */
+let images = <?= json_encode(array_values($headerImages)) ?>;
+let currentIndex = 0;
+
+function openGallery(index){
+    currentIndex = index;
+    document.getElementById('imgPreview').src =
+        '../uploads/transfer/' + images[currentIndex];
+
+    new bootstrap.Modal(document.getElementById('imgModal')).show();
+}
+
+function nextImg(){
+    if(images.length === 0) return;
+    currentIndex = (currentIndex + 1) % images.length;
+    openGallery(currentIndex);
+}
+
+function prevImg(){
+    if(images.length === 0) return;
+    currentIndex = (currentIndex - 1 + images.length) % images.length;
+    openGallery(currentIndex);
+}
 </script>
 
 <!-- =====================================================
@@ -422,5 +522,6 @@ text:'ต้องรอ Admin อนุมัติก่อน'
 });
 </script>
 <?php endif; ?>
+
 
 <?php include 'partials/footer.php'; ?>

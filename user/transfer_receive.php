@@ -179,7 +179,7 @@ class="btn btn-info btn-sm">
 <a href="transfer_receive_print.php?round=<?= $d['sent_transfer'] ?>" 
 class="btn btn-secondary btn-sm" target="_blank">
 
-🖨 ปริ้นใบตรวจเช็ค
+🖨 ปริ้น
 
 </a>
 

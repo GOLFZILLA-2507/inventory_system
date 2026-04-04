@@ -58,34 +58,6 @@ $total = $conn->query("
 SELECT COUNT(*) FROM IT_assets
 ")->fetchColumn();
 
-/* ================= 🔥 ค่าเช่าแยกโครงการ ================= */
-
-// 🔥 กำหนดค่าเช่าต่อวัน (แก้ได้)
-$price_per_day = 50;
-
-$stmt = $conn->query("
-SELECT 
-    user_project,
-    COUNT(*) as total_items,
-    SUM(
-        DATEDIFF(DAY, start_date, ISNULL(end_date, GETDATE()))
-    ) as total_days
-FROM IT_user_history
-WHERE user_project IS NOT NULL
-GROUP BY user_project
-");
-
-$projects = [];
-$amounts = [];
-$counts = [];
-
-while($row = $stmt->fetch(PDO::FETCH_ASSOC)){
-    $projects[] = $row['user_project'];
-    $counts[]   = $row['total_items'];
-
-    // 🔥 คำนวณเงิน
-    $amounts[]  = $row['total_days'] * $price_per_day;
-}
 
 include 'partials/header.php';
 include 'partials/sidebar.php';
@@ -122,23 +94,6 @@ include 'partials/sidebar.php';
     100%{opacity:1;}
 }
 
-.box{
-    background:#fff;
-    border-radius:16px;
-    padding:20px;
-    box-shadow:0 10px 30px rgba(13,110,253,0.1);
-    transition:0.3s;
-}
-.box:hover{
-    transform:translateY(-3px);
-}
-
-.title{
-    font-weight:600;
-    font-size:16px;
-    margin-bottom:10px;
-    color:#0d6efd;
-}
 </style>
 
 <div class="container mt-4">
@@ -246,37 +201,10 @@ include 'partials/sidebar.php';
 
 <hr>
 
-<!-- ================= CHART ================= -->
-<div class="row mt-4">
-
-<!-- 🔥 BAR -->
-<div class="col-md-8">
-<div class="box">
-<div class="title">📊 ภาพรวมระบบ</div>
-<canvas id="barChart" height="90"></canvas>
-</div>
-</div>
-
-<!-- 🔥 DONUT -->
-<div class="col-md-4">
-<div class="box text-center">
-
-<div class="title">💰 ค่าเช่าแยกโครงการ</div>
-
-<canvas id="donutChart" style="max-height:260px"></canvas>
-
-<!-- 🔥 จำนวนโครงการ -->
-<h5 class="mt-3 text-primary">
-<?= count($projects) ?> โครงการ
-</h5>
-
-<small class="text-muted">คิดเป็นค่าเช่าทั้งสิ้น <?= array_sum($amounts) ?> บาท</small>
-
-</div>
-</div>
-
-</div>
-</div>
+<!-- =====================================================
+📊 กราฟ
+===================================================== -->
+<canvas id="chart" height="100"></canvas>
 
 </div>
 
@@ -286,101 +214,58 @@ include 'partials/sidebar.php';
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <script>
-/* ================= 🔥 BAR GRADIENT ================= */
-const ctx = document.getElementById('barChart').getContext('2d');
+const ctx = document.getElementById('chart');
 
-const gradient = ctx.createLinearGradient(0,0,0,400);
-gradient.addColorStop(0,'#0d6efd');
-gradient.addColorStop(1,'#74c0fc');
+new Chart(ctx, {
+    type: 'bar',
+    data: {
+        labels: ['รออนุมัติ','ซ่อม','ไม่มีผู้ใช้','โอนย้ายทั้งหมด'],
+        datasets: [{
+            label: 'จำนวนรายการ',
+            data: [<?= $pending ?>,<?= $repair ?>,<?= $sent ?>,<?= $waiting ?>],
 
-new Chart(ctx,{
-type:'bar',
-data:{
-labels:['รออนุมัติ','ซ่อม','โอนย้าย','รอตรวจรับ'],
-datasets:[{
-label:'จำนวน',
-data:[<?= $pending ?>,<?= $repair ?>,<?= $sent ?>,<?= $waiting ?>],
-backgroundColor: gradient,
-borderRadius:12,
-barThickness:40
-}]
-},
-options:{
-responsive:true,
-plugins:{
-legend:{display:false}
-},
-scales:{
-x:{
-grid:{display:false}
-},
-y:{
-beginAtZero:true,
-grid:{
-color:'rgba(0,0,0,0.05)'
-}
-}
-}
-}
-});
+            /* 🔥 สีแท่ง */
+            backgroundColor: [
+                'rgba(163, 183, 238, 0.8)',   // เหลือง
+                'rgba(68, 211, 247, 0.8)',  // ฟ้า
+                'rgba(155, 223, 146, 0.8)', // เทา
+                'rgba(100, 211, 159, 0.8)',   // เขียว
+                'rgba(209, 107, 170, 0.8)'    // แดง
+            ],
 
+            borderColor: [
+                '#2503b9',
+                '#0dcaf0',
+                '#6c757d',
+                '#198754',
+                '#dc3545'
+            ],
 
-/* ================= 🔥 DONUT ================= */
-const projectLabels = <?= json_encode($projects) ?>;
-const projectAmounts = <?= json_encode($amounts) ?>;
-const projectCounts = <?= json_encode($counts) ?>;
+            borderWidth: 1,
+            borderRadius: 8,   // 🔥 มุมโค้ง
+            barThickness: 200   // 🔥 ความหนา
+        }]
+    },
 
-/* 🔥 สร้างสี auto */
-function generateColors(num){
-    let colors = [];
-    for(let i=0;i<num;i++){
-        let hue = i * (360 / num);
-        colors.push(`hsl(${hue},70%,60%)`);
+    options: {
+        responsive: true,
+        plugins: {
+            legend: {
+                labels: {
+                    font: {
+                        size: 14
+                    }
+                }
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                ticks: {
+                    stepSize: 1
+                }
+            }
+        }
     }
-    return colors;
-}
-
-const colors = generateColors(projectLabels.length);
-
-new Chart(document.getElementById('donutChart'),{
-type:'doughnut',
-data:{
-labels: projectLabels,
-datasets:[{
-data: projectAmounts,
-backgroundColor: colors,
-borderWidth:0
-}]
-},
-options:{
-cutout:'65%',
-plugins:{
-legend:{
-position:'bottom',
-labels:{
-usePointStyle:true
-}
-},
-tooltip:{
-callbacks:{
-label: function(context){
-
-let index = context.dataIndex;
-
-let project = projectLabels[index];
-let amount = projectAmounts[index];
-let count  = projectCounts[index];
-
-return [
-'โครงการ: ' + project,
-'จำนวน: ' + count + ' รายการ',
-'ค่าเช่า: ' + amount.toLocaleString() + ' บาท'
-];
-
-}
-}
-}
-}
-}
 });
 </script>

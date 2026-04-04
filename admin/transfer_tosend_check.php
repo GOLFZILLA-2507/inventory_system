@@ -18,6 +18,29 @@ ORDER BY transfer_id
 $stmt->execute([$round,$site]);
 $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+$headerDetail = '';
+$headerImages = [];
+
+foreach($data as $d){
+
+    // เอา detail แค่ตัวแรกที่มี
+    if(empty($headerDetail) && !empty($d['other_detail'])){
+        $headerDetail = $d['other_detail'];
+    }
+
+    // รวมรูปทั้งหมด
+    if(!empty($d['transfer_image'])){
+        // รองรับหลายรูป (คั่นด้วย ,)
+        $imgs = explode(',', $d['transfer_image']);
+        foreach($imgs as $img){
+            $headerImages[] = trim($img);
+        }
+    }
+}
+
+/* กันรูปซ้ำ */
+$headerImages = array_unique($headerImages);
+
 /* =====================================================
 🔥 คำนวณสถานะรอบ
 ===================================================== */
@@ -216,6 +239,25 @@ body{
 <a href="transfer_receive_check.php" class="btn btn-light btn-sm">ย้อนกลับ</a>
 </div>
 
+<div class="border border-primary rounded p-3 mt-1 mb-3">
+
+<b>รายละเอียด:</b><br>
+<?= !empty($headerDetail) ? nl2br(htmlspecialchars($headerDetail)) : '-' ?>
+
+<br><br>
+
+<b>รูปภาพ:</b><br>
+
+<?php if(!empty($headerImages)): ?>
+    <img src="../uploads/transfer/<?= $headerImages[0] ?>"
+         style="width:120px;cursor:pointer"
+         onclick="openGallery(0)">
+<?php else: ?>
+    -
+<?php endif; ?>
+
+</div>
+
 <div class="card-body">
 
 <form method="post" id="formReceive">
@@ -294,6 +336,25 @@ else{
 </div>
 </div>
 
+<div class="modal fade" id="imgModal">
+<div class="modal-dialog modal-lg modal-dialog-centered">
+<div class="modal-content">
+
+<div class="modal-body text-center">
+
+<img id="imgPreview" style="width:100%;max-height:70vh;object-fit:contain">
+
+<div class="mt-2">
+<button class="btn btn-primary btn-sm" onclick="prevImg()">⬅</button>
+<button class="btn btn-primary btn-sm" onclick="nextImg()">➡</button>
+</div>
+
+</div>
+
+</div>
+</div>
+</div>
+
 <script>
 /* ================= CONFIRM ================= */
 let btn = document.getElementById('btnConfirm');
@@ -330,6 +391,47 @@ icon:'error',
 title:'เกิดข้อผิดพลาด'
 });
 <?php endif; ?>
+
+// ===============================
+// IMAGE SLIDE
+// ===============================
+let images = <?= json_encode(array_values($headerImages ?? [])) ?>;
+let currentIndex = 0;
+
+function openGallery(index){
+
+    if(images.length === 0) return;
+
+    currentIndex = index;
+
+    document.getElementById('imgPreview').src =
+        '../uploads/transfer/' + images[currentIndex];
+
+    let modalEl = document.getElementById('imgModal');
+
+    let modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+
+    modal.show();
+}
+
+function nextImg(){
+    if(images.length === 0) return;
+
+    currentIndex = (currentIndex + 1) % images.length;
+    updateImage();
+}
+
+function prevImg(){
+    if(images.length === 0) return;
+
+    currentIndex = (currentIndex - 1 + images.length) % images.length;
+    updateImage();
+}
+
+function updateImage(){
+    document.getElementById('imgPreview').src =
+        '../uploads/transfer/' + images[currentIndex];
+}
 </script>
 
 <?php include 'partials/footer.php'; ?>

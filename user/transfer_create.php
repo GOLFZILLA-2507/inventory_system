@@ -24,9 +24,13 @@ $projects = $stmt->fetchAll(PDO::FETCH_COLUMN);
 /* =====================================================
 📷 UPLOAD FILE
 ===================================================== */
-$uploadName = null;
+$uploadNames = [];
 
-if(!empty($_FILES['transfer_image']['name'])){
+if(!empty($_FILES['transfer_image']['name'][0])){
+
+    if($_FILES['transfer_image']['size'][$i] > 5 * 1024 * 1024){
+        die('ไฟล์ต้องไม่เกิน 5MB');
+    }
 
     $dir = "../uploads/transfer/";
 
@@ -34,11 +38,34 @@ if(!empty($_FILES['transfer_image']['name'])){
         mkdir($dir,0777,true);
     }
 
-    $ext = pathinfo($_FILES['transfer_image']['name'], PATHINFO_EXTENSION);
-    $uploadName = 'TR_'.time().'_'.rand(1000,9999).'.'.$ext;
+    $allowed = ['jpg','jpeg','png','webp'];
 
-    move_uploaded_file($_FILES['transfer_image']['tmp_name'],$dir.$uploadName);
+    // ✅ จำกัดไม่เกิน 10 รูป
+    if(count($_FILES['transfer_image']['name']) > 5){
+        die('อัปโหลดได้ไม่เกิน 5 รูป');
+    }
+
+    foreach($_FILES['transfer_image']['name'] as $i => $name){
+
+        $ext = pathinfo($name, PATHINFO_EXTENSION);
+
+        if(!in_array(strtolower($ext),$allowed)){
+            die('มีไฟล์ไม่ถูกต้อง');
+        }
+
+        $newName = 'TR_'.time().'_'.$i.'_'.rand(1000,9999).'.'.$ext;
+
+        move_uploaded_file(
+            $_FILES['transfer_image']['tmp_name'][$i],
+            $dir.$newName
+        );
+
+        $uploadNames[] = $newName;
+    }
 }
+
+/* ✅ แปลงเป็น string เก็บ DB */
+$uploadName = !empty($uploadNames) ? implode(',', $uploadNames) : null;
 /* =====================================================
 🔍 FUNCTION: ดึงสถานะล่าสุดของอุปกรณ์ (หัวใจ)
 ===================================================== */
@@ -147,28 +174,22 @@ if($_SERVER['REQUEST_METHOD']=='POST'){
                 no_pc,
                 type,
                 transfer_image,
-                other_item,
                 other_detail
             )
-            VALUES (?,?,?,?,?,?,?,?,?,?,?)
+            VALUES (?,?,?,?,?,?,?,?,?,?)
             ");
-
-            $stmt->execute([
-    $round,
-    $type,
-    $site,
-    $to,
-    $user,
-    $adminStatus,
-    $code,
-    '',
-    $uploadName,
-    $other_item,
-    $other_detail
-]);
 
 
         foreach($items as $code){
+
+            $typeDevice = '';
+            foreach($assets as $a){
+                if($a['no_pc']==$code){
+                    $typeDevice = $a['type'];
+                    break;
+                }
+            }
+
 
             $t = getTransferStatus($conn,$code);
 
@@ -189,7 +210,7 @@ if($_SERVER['REQUEST_METHOD']=='POST'){
             }
 
             /* ================= INSERT ================= */
-            $stmt->execute([
+                $stmt->execute([
                 $round,
                 $type,
                 $site,
@@ -197,7 +218,9 @@ if($_SERVER['REQUEST_METHOD']=='POST'){
                 $user,
                 $adminStatus,
                 $code,
-                ''
+                $typeDevice,
+                $uploadName,
+                $other_detail
             ]);
         }
 
@@ -227,7 +250,7 @@ if($_SERVER['REQUEST_METHOD']=='POST'){
 
 <div class="card-body">
 
-<form method="post" id="formTransfer">
+<form method="post" id="formTransfer" enctype="multipart/form-data">
 
 <div class="row mb-3">
 
@@ -252,25 +275,18 @@ if($_SERVER['REQUEST_METHOD']=='POST'){
 </select>
 </div>
 
-<div class="row mb-3 mt-3">
-
-<div class="col-md-4">
-<label>กรณีมีรายการอื่นๆ</label>
-<select name="other_item" class="form-control">
-<option value="other_item">อื่นๆ</option>
-</select>
-</div>
-
-<div class="col-md-8">
+<div class="row mb-3">
+    
+<div class="col-md-12">
 <label>📝 รายละเอียดเพิ่มเติม</label>
 <textarea name="other_detail" class="form-control" rows="2" placeholder="รายละเอียด..."></textarea>
 </div>
 
-</div>
+
 
 <div class="mb-3">
-<label>📷 แนบรูป</label>
-<input type="file" name="transfer_image" class="form-control" accept="image/*">
+<label>📷 แนบรูป (สูงสุด 5 รูป ขนาดไฟล์ไม่เกิน 5MB/รูป)</label>
+<input type="file" name="transfer_image[]" class="form-control" accept="image/*" multiple>
 </div>
 
 </div>

@@ -55,23 +55,10 @@
 
 <li><a class="dropdown-item" href="transfer_s_project.php">📤 ส่งมอบอุปกรณ์</a></li>
 <li><a class="dropdown-item" href="transfer_s_project_list.php">📦 รายการส่งอุปกรณ์</a></li>
-<li><a class="dropdown-item" href="transfer_receive_check.php">📥 รายการที่ส่งมาหาฉัน</a></li>
 
 </ul>
 </li>
 
-<!-- 🔥 กลุ่ม 4: รับอุปกรณ์ 
-<li class="nav-item dropdown">
-<a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
-📥 รับอุปกรณ์
-</a>
-<ul class="dropdown-menu">
-
-<li><a class="dropdown-item" href="transfer_return.php">🔄 รับคืนอุปกรณ์</a></li>
-
-</ul>
-</li>
--->
 <?php endif; ?>
 
 </ul>

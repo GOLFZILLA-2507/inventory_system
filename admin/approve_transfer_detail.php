@@ -39,6 +39,30 @@ ORDER BY transfer_id DESC
 $stmt->execute([$round]);
 $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+$headerDetail = '';
+$headerImages = [];
+
+foreach($data as $d){
+
+    // เอา detail แค่ตัวแรกที่มี
+    if(empty($headerDetail) && !empty($d['other_detail'])){
+        $headerDetail = $d['other_detail'];
+    }
+
+    // รวมรูปทั้งหมด
+    if(!empty($d['transfer_image'])){
+        // รองรับหลายรูป (คั่นด้วย ,)
+        $imgs = explode(',', $d['transfer_image']);
+        foreach($imgs as $img){
+            $headerImages[] = trim($img);
+        }
+    }
+}
+
+/* กันรูปซ้ำ */
+$headerImages = array_unique($headerImages);
+/* ===== 🔥 จบตรงนี้ ===== */
+
 /* =====================================================
 🔥 CHECK STATUS
 ===================================================== */
@@ -69,7 +93,26 @@ include 'partials/sidebar.php';
 <div class="card shadow">
 
 <div class="card-header bg-primary text-white">
-📦 รอบที่ <?= $round ?>
+📦 รายการอนุมัติรอบที่ <?= $round ?>
+</div>
+
+<div class="border border-primary rounded p-3 mt-1 mb-3">
+
+<b>รายละเอียด:</b><br>
+<?= !empty($headerDetail) ? nl2br(htmlspecialchars($headerDetail)) : '-' ?>
+
+<br><br>
+
+<b>รูปภาพ:</b><br>
+
+<?php if(!empty($headerImages)): ?>
+    <img src="../uploads/transfer/<?= $headerImages[0] ?>"
+         style="width:120px;cursor:pointer"
+         onclick="openGallery(0)">
+<?php else: ?>
+    -
+<?php endif; ?>
+
 </div>
 
 <div class="card-body">
@@ -191,18 +234,61 @@ include 'partials/sidebar.php';
 </div>
 </div>
 
-<!-- 🔥 สำคัญ: ต้องมี -->
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<div class="modal fade" id="imgModal">
+<div class="modal-dialog modal-lg modal-dialog-centered">
+<div class="modal-content">
+
+<div class="modal-body text-center">
+
+<img id="imgPreview" style="width:100%;max-height:70vh;object-fit:contain">
+
+<div class="mt-2">
+<button class="btn btn-primary btn-sm" onclick="prevImg()">⬅</button>
+<button class="btn btn-primary btn-sm" onclick="nextImg()">➡</button>
+</div>
+
+</div>
+
+</div>
+</div>
+</div>
+
 
 <script>
-// ✅ check all
-document.getElementById('checkAll').onchange = function(){
+// ===============================
+// GLOBAL CLEAN MODAL (ตัวสำคัญสุด)
+// ===============================
+function forceResetModal(){
+
+    // ลบ backdrop ทุกตัว
+    document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+
+    // ลบ class ที่ล็อก scroll
+    document.body.classList.remove('modal-open');
+
+    // reset style
+    document.body.style.overflow = '';
+    document.body.style.paddingRight = '';
+}
+
+// 🔥 ทำตอนโหลด
+document.addEventListener("DOMContentLoaded", forceResetModal);
+
+// 🔥 ทำตอน modal ปิด
+document.addEventListener('hidden.bs.modal', forceResetModal);
+
+// ===============================
+// CHECK ALL
+// ===============================
+document.getElementById('checkAll')?.addEventListener('change', function(){
     document.querySelectorAll('.item').forEach(cb=>{
         cb.checked = this.checked;
     });
-};
+});
 
-// ✅ เปิด modal
+// ===============================
+// OPEN CONFIRM MODAL
+// ===============================
 document.getElementById('btnApprove')?.addEventListener('click', function(){
 
     let checked = document.querySelectorAll('.item:checked');
@@ -212,16 +298,21 @@ document.getElementById('btnApprove')?.addEventListener('click', function(){
         return;
     }
 
-    let modal = new bootstrap.Modal(document.getElementById('confirmModal'));
+    let modalEl = document.getElementById('confirmModal');
+
+    // 🔥 ป้องกัน modal ซ้อน
+    let modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+
     modal.show();
 });
 
-// ✅ submit จริง
-document.getElementById('confirmSubmit').onclick = function(){
+// ===============================
+// SUBMIT
+// ===============================
+document.getElementById('confirmSubmit')?.addEventListener('click', function(){
 
     let form = document.getElementById('mainForm');
 
-    // 🔥 inject approve_selected
     if(!form.querySelector('[name="approve_selected"]')){
         let input = document.createElement("input");
         input.type = "hidden";
@@ -231,19 +322,64 @@ document.getElementById('confirmSubmit').onclick = function(){
     }
 
     form.submit();
-};
+});
 
-// ✅ success modal
+// ===============================
+// SUCCESS MODAL
+// ===============================
 <?php if(isset($_GET['success'])): ?>
 window.addEventListener('DOMContentLoaded', function(){
 
-    let modal = new bootstrap.Modal(document.getElementById('successModal'));
+    let modalEl = document.getElementById('successModal');
+
+    let modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+
     modal.show();
 
-    // กัน refresh แล้วเด้งซ้ำ
     window.history.replaceState({}, document.title, window.location.pathname + '?round=<?= $round ?>');
 });
 <?php endif; ?>
+
+// ===============================
+// IMAGE SLIDE
+// ===============================
+let images = <?= json_encode(array_values($headerImages ?? [])) ?>;
+let currentIndex = 0;
+
+function openGallery(index){
+
+    if(images.length === 0) return;
+
+    currentIndex = index;
+
+    document.getElementById('imgPreview').src =
+        '../uploads/transfer/' + images[currentIndex];
+
+    let modalEl = document.getElementById('imgModal');
+
+    let modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+
+    modal.show();
+}
+
+function nextImg(){
+    if(images.length === 0) return;
+
+    currentIndex = (currentIndex + 1) % images.length;
+    updateImage();
+}
+
+function prevImg(){
+    if(images.length === 0) return;
+
+    currentIndex = (currentIndex - 1 + images.length) % images.length;
+    updateImage();
+}
+
+function updateImage(){
+    document.getElementById('imgPreview').src =
+        '../uploads/transfer/' + images[currentIndex];
+}
 </script>
 
 <?php include 'partials/footer.php'; ?>
