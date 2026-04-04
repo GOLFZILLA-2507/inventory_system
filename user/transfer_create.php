@@ -20,6 +20,25 @@ ORDER BY site
 $stmt->execute([$site]);
 $projects = $stmt->fetchAll(PDO::FETCH_COLUMN);
 
+
+/* =====================================================
+📷 UPLOAD FILE
+===================================================== */
+$uploadName = null;
+
+if(!empty($_FILES['transfer_image']['name'])){
+
+    $dir = "../uploads/transfer/";
+
+    if(!is_dir($dir)){
+        mkdir($dir,0777,true);
+    }
+
+    $ext = pathinfo($_FILES['transfer_image']['name'], PATHINFO_EXTENSION);
+    $uploadName = 'TR_'.time().'_'.rand(1000,9999).'.'.$ext;
+
+    move_uploaded_file($_FILES['transfer_image']['tmp_name'],$dir.$uploadName);
+}
 /* =====================================================
 🔍 FUNCTION: ดึงสถานะล่าสุดของอุปกรณ์ (หัวใจ)
 ===================================================== */
@@ -92,6 +111,9 @@ if($_SERVER['REQUEST_METHOD']=='POST'){
     $type  = $_POST['transfer_type'];
     $to    = $_POST['to_site'];
 
+    $other_item   = $_POST['other_item'] ?? null;
+    $other_detail = $_POST['other_detail'] ?? null;
+
     $adminStatus = 'รออนุมัติ';
 
     // 🔥 ส่งสำนักงานใหญ่ auto
@@ -114,10 +136,37 @@ if($_SERVER['REQUEST_METHOD']=='POST'){
         ")->fetchColumn();
 
         $stmt = $conn->prepare("
-        INSERT INTO IT_AssetTransfer_Headers
-        (sent_transfer,transfer_type,from_site,to_site,created_by,admin_status,no_pc,type)
-        VALUES (?,?,?,?,?,?,?,?)
-        ");
+            INSERT INTO IT_AssetTransfer_Headers
+            (
+                sent_transfer,
+                transfer_type,
+                from_site,
+                to_site,
+                created_by,
+                admin_status,
+                no_pc,
+                type,
+                transfer_image,
+                other_item,
+                other_detail
+            )
+            VALUES (?,?,?,?,?,?,?,?,?,?,?)
+            ");
+
+            $stmt->execute([
+    $round,
+    $type,
+    $site,
+    $to,
+    $user,
+    $adminStatus,
+    $code,
+    '',
+    $uploadName,
+    $other_item,
+    $other_detail
+]);
+
 
         foreach($items as $code){
 
@@ -186,7 +235,6 @@ if($_SERVER['REQUEST_METHOD']=='POST'){
 <label>ประเภท</label>
 <select name="transfer_type" class="form-control">
 <option value="โอนย้าย">โอนย้าย</option>
-<option value="ส่งคืน">ส่งคืน</option>
 </select>
 </div>
 
@@ -202,6 +250,27 @@ if($_SERVER['REQUEST_METHOD']=='POST'){
 <option><?= $p ?></option>
 <?php endforeach; ?>
 </select>
+</div>
+
+<div class="row mb-3 mt-3">
+
+<div class="col-md-4">
+<label>กรณีมีรายการอื่นๆ</label>
+<select name="other_item" class="form-control">
+<option value="other_item">อื่นๆ</option>
+</select>
+</div>
+
+<div class="col-md-8">
+<label>📝 รายละเอียดเพิ่มเติม</label>
+<textarea name="other_detail" class="form-control" rows="2" placeholder="รายละเอียด..."></textarea>
+</div>
+
+</div>
+
+<div class="mb-3">
+<label>📷 แนบรูป</label>
+<input type="file" name="transfer_image" class="form-control" accept="image/*">
 </div>
 
 </div>
