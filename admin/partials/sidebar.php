@@ -38,10 +38,24 @@
 <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
 🏢 จัดการโครงการ
 </a>
-<ul class="dropdown-menu">
 
+<ul class="dropdown-menu">
 <li><a class="dropdown-item" href="admin_assign_userproject.php">🔄 กำหนดโครงการ</a></li>
 <li><a class="dropdown-item" href="admin_rental_price_manage.php">💰 จัดการราคาเช่า</a></li>
+</ul>
+</li>
+
+<!-- 🔥 กลุ่ม 2: จัดการโครงการ -->
+<li class="nav-item dropdown">
+<a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
+🏢 จัดการอุปกรณ์
+</a>
+<ul class="dropdown-menu">
+
+<li><a class="dropdown-item" href="asset_assign.php">💻 จัดการอุปกรณ์ใช้หลัก</a></li>
+<li><a class="dropdown-item" href="asset_shared_add.php">📡 เพิ่มอุปกรณ์ใช้ร่วม</a></li>
+<li><a class="dropdown-item" href="asset_assign_no_code.php">🆕 เพิ่มอุปกรณ์หลัก (ไม่มีรหัส)</a></li>
+<li><a class="dropdown-item" href="asset_assign_shared.php">📡 จัดการอุปกรณ์ใช้ร่วม (ไม่มีรหัส)</a></li>
 
 </ul>
 </li>
@@ -55,6 +69,20 @@
 
 <li><a class="dropdown-item" href="transfer_s_project.php">📤 ส่งมอบอุปกรณ์</a></li>
 <li><a class="dropdown-item" href="transfer_s_project_list.php">📦 รายการส่งอุปกรณ์</a></li>
+
+</ul>
+</li>
+
+
+<!-- 🔥 กลุ่ม 3: ส่งอุปกรณ์ -->
+<li class="nav-item dropdown">
+<a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
+🆕 จัดการ
+</a>
+<ul class="dropdown-menu">
+
+<li><a class="dropdown-item" href="asset_device_PReview.php">📤 ตรวจเช็คอุปกรณ์</a></li>
+<li><a class="dropdown-item" href="asset_check.php">📦 ค้นหารหัสผู้ใช้</a></li>
 
 </ul>
 </li>

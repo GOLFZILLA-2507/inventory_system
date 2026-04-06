@@ -387,6 +387,52 @@ color:white;
 </tr>
 </thead>
 
+<?php
+$group = [];
+
+foreach($data as $d){
+
+    $emp = $d['user_employee'] ?: 'no_user_'.$d['user_no_pc'];
+
+    if(!isset($group[$emp])){
+        $group[$emp] = [
+            'name' => $d['user_employee'],
+            'project' => $d['user_project'],
+            'PC' => '-',
+            'Monitor1' => '-',
+            'Monitor2' => '-',
+            'UPS' => '-',
+            'price' => 0,
+            'days' => 0,
+            'total' => 0,
+            'repair' => $d['repair_status']
+        ];
+    }
+
+    /* 🔥 map type */
+    if(in_array($d['type_equipment'], ['PC','Notebook','All_In_One'])){
+        $group[$emp]['PC'] = $d['user_no_pc'];
+    }
+
+    if($d['type_equipment'] == 'Monitor'){
+        if($group[$emp]['Monitor1'] == '-'){
+            $group[$emp]['Monitor1'] = $d['user_no_pc'];
+        }else{
+            $group[$emp]['Monitor2'] = $d['user_no_pc'];
+        }
+    }
+
+    if($d['type_equipment'] == 'UPS'){
+        $group[$emp]['UPS'] = $d['user_no_pc'];
+    }
+
+    /* 🔥 รวมเงิน */
+    $group[$emp]['price'] += $d['rental_price'];
+    $group[$emp]['days']  = max($group[$emp]['days'], $d['total_days']);
+    $group[$emp]['total'] += $d['total_price'];
+}
+?>
+
 <tbody>
 <?php $i=1; foreach($data as $d): ?>
 <tr>

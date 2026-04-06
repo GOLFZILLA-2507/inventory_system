@@ -55,62 +55,9 @@ if(isset($_POST['save'])){
 }
 
 /* =====================================================
-🔥 SAVE USER (แก้ใหม่)
-===================================================== */
-if(isset($_POST['save_user'])){
-
-    $asset_id = $_POST['asset_id'];
-    $user_emp = trim($_POST['user_employee']);
-    $target_project = $_POST['target_project'];
-
-    if(empty($user_emp)){
-        header("Location: asset_all.php?error=nouser");
-        exit();
-    }
-
-    /* 🔥 ดึง asset */
-    $stmt = $conn->prepare("
-        SELECT no_pc, type_equipment 
-        FROM IT_assets 
-        WHERE asset_id=?
-    ");
-    $stmt->execute([$asset_id]);
-    $asset = $stmt->fetch(PDO::FETCH_ASSOC);
-
-    $no_pc = $asset['no_pc'];
-    $type  = $asset['type_equipment'];
-
-    /* =====================================================
-    🔥 กันซ้ำ "ระดับเครื่อง" (สำคัญ)
-    ===================================================== */
-    $check = $conn->prepare("
-        SELECT * FROM IT_user_devices
-        WHERE device_code=?
-    ");
-    $check->execute([$no_pc]);
-
-    if($check->fetch()){
-        header("Location: asset_all.php?error=duplicate");
-        exit();
-    }
-
-    /* 🔥 INSERT */
-    $stmt = $conn->prepare("
-        INSERT INTO IT_user_devices
-        (device_code, device_type, user_employee, user_project)
-        VALUES (?,?,?,?)
-    ");
-    $stmt->execute([$no_pc,$type,$user_emp,$target_project]);
-
-    header("Location: asset_all.php");
-    exit();
-}
-
-/* =====================================================
 🔥 FILTER DATA
 ===================================================== */
 $typeList = $conn->query("SELECT DISTINCT type_equipment FROM IT_assets")->fetchAll(PDO::FETCH_ASSOC);
-$userList = $conn->query("SELECT fullname FROM Employee")->fetchAll(PDO::FETCH_COLUMN);
 $projList = $conn->query("SELECT DISTINCT site FROM Employee")->fetchAll(PDO::FETCH_ASSOC);
 
 /* =====================================================
@@ -304,13 +251,6 @@ body{font-family:'Sarabun';font-size:14px;background:#eef6ff;}
 📊 รายงาน Service Life อุปกรณ์
 </div>
 
-<div class="card-body">
-<?php if(isset($_GET['error']) && $_GET['error']=='duplicate'): ?> <!-- แก้ไข: error=duplicate -->
-<div class="alert alert-danger text-center">
-❌ คนนี้มีอุปกรณ์ในโครงการนี้อยู่แล้ว
-</div>
-<?php endif; ?>
-
 <!-- FILTER -->
 <form class="row mb-3 g-2">
 <div class="col-md-4">
@@ -374,7 +314,6 @@ body{font-family:'Sarabun';font-size:14px;background:#eef6ff;}
 <th>อยู่ในเกณฑ์</th>
 <?php if($role != 'MD'): ?>
 <th>รายละเอียด</th>
-<th>เพิ่มผู้ใช้งาน</th>
 <?php endif; ?>
 </tr>
 </thead>
@@ -426,34 +365,6 @@ else{
         data-bs-target="#detail<?= $row['asset_id'] ?>">
 จัดการ
 </button>
-</td>
-
-<td>
-
-<?php if(empty($row['user_employee'])): ?>
-
-    <?php 
-    $type = strtolower(trim($row['type_equipment'])); 
-    if(in_array($type, $shared)): 
-    ?>
-    <button class="btn btn-warning btn-sm"
-    data-bs-toggle="modal"
-    data-bs-target="#assignUser<?= $row['asset_id'] ?>">
-    นำมาใช้งาน
-    </button>
-
-    <?php else: ?>
-    <button class="btn btn-success btn-sm"
-    data-bs-toggle="modal"
-    data-bs-target="#assignUser<?= $row['asset_id'] ?>">
-    เพิ่มผู้ใช้งาน
-    </button>
-    <?php endif; ?>
-
-<?php else: ?><!-- ถ้ามีผู้ใช้แล้ว -->
-    <span class="text-muted"></span>
-<?php endif; ?>
-
 </td>
 
 <?php endif; ?>
@@ -554,88 +465,6 @@ value="<?= $row['machine_value'] ?>">
 
 </form>
 <!-- ✅ จบ form -->
-
-</div>
-</div>
-</div>
-
-<!-- =====================================================
-🔥 MODAL เพิ่มผู้ใช้งาน (ใหม่)
-===================================================== -->
-<div class="modal fade" id="assignUser<?= $row['asset_id'] ?>">
-<div class="modal-dialog modal-dialog-centered">
-<div class="modal-content">
-
-<form method="post">
-
-<!-- HEADER -->
-<div class="modal-header" style="background:linear-gradient(135deg,#0d6efd,#0dcaf0);color:white;">
-<h5>👤 เพิ่มผู้ใช้งาน</h5>
-<button class="btn-close" data-bs-dismiss="modal"></button>
-</div>
-
-<!-- BODY -->
-<div class="modal-body">
-
-<input type="hidden" name="asset_id" value="<?= $row['asset_id'] ?>">
-
-<div class="mb-3">
-<label>รหัสอุปกรณ์</label>
-<input type="text" class="form-control" value="<?= $row['no_pc'] ?>" readonly>
-</div>
-
-<div class="mb-3">
-<label>ผู้ใช้งาน</label>
-<!-- 🔥 input + search -->
-<input list="userList"
-       name="user_employee"
-       class="form-control"
-       placeholder="พิมพ์ชื่อผู้ใช้งาน..."
-       required>
-
-<!-- 🔥 datalist -->
-<datalist id="userList">
-<?php foreach($userList as $u): ?>
-    <option value="<?= $u ?>">
-<?php endforeach; ?>
-</datalist>
-
-<!-- 🔥 เลือกโครงการ -->
-<div class="mb-3">
-<label>โครงการปลายทาง</label>
-<select name="target_project" class="form-control" required>
-<option value="">-- เลือกโครงการ --</option>
-<?php foreach($projList as $p): ?>
-<option value="<?= $p['site'] ?>"><?= $p['site'] ?></option>
-<?php endforeach; ?>
-</select>
-</div>
-</div>
-
-<?php if(!in_array($type, $shared)): ?>
-
-
-
-<?php endif; ?>
-
-</div>
-
-<!-- FOOTER -->
-<div class="modal-footer">
-
-<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-ยกเลิก
-</button>
-
-<button type="submit" name="save_user"
-class="btn btn-primary"
-onclick="return confirm('ยืนยันเพิ่มผู้ใช้งาน ?')">
-💾 บันทึก
-</button>
-
-</div>
-
-</form>
 
 </div>
 </div>

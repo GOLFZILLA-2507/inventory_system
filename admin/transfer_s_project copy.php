@@ -163,96 +163,96 @@ if($_SERVER['REQUEST_METHOD']=='POST'){
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
 <style>
-body{background:linear-gradient(135deg,#e3f2fd,#ffffff);}
-.card{border-radius:16px;box-shadow:0 10px 30px rgba(13,110,253,0.1);}
-.card-header{background:linear-gradient(135deg,#0d6efd,#74c0fc);color:white;}
-
-.tag{
-display:inline-block;
-background:#0d6efd;
-color:white;
-padding:6px 12px;
-border-radius:20px;
-margin:4px;
-cursor:pointer;
+body{
+    background:linear-gradient(135deg,#e3f2fd,#ffffff);
 }
-
-.preview{
-background:#fff;
-border-radius:10px;
-padding:10px;
-min-height:60px;
-box-shadow:0 3px 10px rgba(0,0,0,0.05);
+.card-header{
+    background:linear-gradient(135deg,#2196f3,#64b5f6);
+    color:white;
+}
+.group-box{
+    background:white;
+    border-radius:12px;
+    padding:15px;
+    margin-bottom:15px;
+    box-shadow:0 5px 12px rgba(0,0,0,0.05);
+}
+.tag{
+    display:inline-block;
+    background:#42a5f5;
+    color:white;
+    padding:6px 12px;
+    border-radius:20px;
+    margin:4px;
+}
+select option:disabled{
+    color:#999;
+    background:#eee;
 }
 </style>
 
 <div class="container mt-4">
-<div class="card">
+<div class="card shadow">
 
 <div class="card-header">
-🚚 ส่งอุปกรณ์ (UI ใหม่)
+🚚 ส่งอุปกรณ์ (Admin)
 </div>
 
 <div class="card-body">
 
-<form method="post" id="formSend" enctype="multipart/form-data">
+<form method="post" id="formSend">
 <input type="hidden" name="form_token" value="<?= $_SESSION['form_token'] ?>">
 
-<!-- 🔥 PROJECT -->
-<label>โครงการปลายทาง</label>
-<select name="to_site" id="toSite" class="form-control mb-3">
-<option value="">-- เลือกโครงการ --</option>
+<div class="row mb-3">
+<div class="col-md-6">
+<select name="to_site" id="toSite" class="form-control">
+<option value="">-- เลือกโครงการปลายทาง --</option>
 <?php foreach($projects as $p): ?>
 <option><?= $p ?></option>
 <?php endforeach; ?>
 </select>
+</div>
 
-<!-- 🔥 DETAIL -->
-<label>รายละเอียด</label>
-<textarea name="detail" class="form-control mb-3" placeholder="รายละเอียด..."></textarea>
-
-<!-- 🔥 UPLOAD -->
-<label>แนบรูป</label>
-<input type="file" class="form-control mb-3" multiple>
-
-<!-- 🔥 FILTER TYPE -->
-<label>กรองประเภท</label>
-<select id="filterType" class="form-control mb-2">
-<option value="">ทั้งหมด</option>
-<?php foreach(array_keys($grouped) as $t): ?>
-<option><?= $t ?></option>
-<?php endforeach; ?>
-</select>
-
-<!-- 🔥 SELECT ALL IN ONE -->
-<label>เลือกอุปกรณ์</label>
-<select id="assetSelect" class="form-control mb-2">
-<option value="">-- เลือกอุปกรณ์ --</option>
-
-<?php foreach($grouped as $type=>$items): ?>
-<?php foreach($items as $a): ?>
-<option 
-value="<?= $a['no_pc'] ?>"
-data-type="<?= $type ?>"
-<?= !empty($a['use_it'])?'disabled':'' ?>
->
-<?= $type ?> | <?= $a['no_pc'] ?>
-<?= !empty($a['use_it']) ? "(อยู่ที่ ".$a['use_it'].")":"" ?>
-</option>
-<?php endforeach; ?>
-<?php endforeach; ?>
-
-</select>
-
-<button type="button" id="btnAdd" class="btn btn-info btn-sm mb-3">+ เพิ่ม</button>
-
-<!-- 🔥 PREVIEW -->
-<div class="preview" id="preview"></div>
-
-<div class="text-end mt-3">
-<button type="button" id="btnSend" class="btn btn-primary">
+<div class="col-md-6">
+<button type="button" id="btnSend" class="btn btn-primary w-100">
 📨 ส่งมอบ
 </button>
+</div>
+</div>
+
+<div class="row">
+<?php foreach($grouped as $type => $items): ?>
+<div class="col-md-6">
+<div class="group-box">
+
+<b><?= $type ?></b>
+
+<select class="form-control mt-2 selectItem">
+<option value="">-- เลือก <?= $type ?> --</option>
+
+<?php foreach($items as $a): 
+$disabled = !empty($a['use_it']);
+?>
+
+<option value="<?= $a['no_pc'] ?>" <?= $disabled?'disabled':'' ?>>
+
+<?= $a['no_pc'] ?> | <?= $a['spec'] ?>
+
+<?php if($disabled): ?>
+(อยู่ที่ <?= $a['use_it'] ?>)
+<?php endif; ?>
+
+</option>
+
+<?php endforeach; ?>
+</select>
+
+<button type="button" class="btn btn-info btn-sm mt-2 btnAdd">+ เพิ่ม</button>
+<div class="selectedList mt-2"></div>
+
+</div>
+</div>
+<?php endforeach; ?>
 </div>
 
 </form>
@@ -262,126 +262,66 @@ data-type="<?= $type ?>"
 </div>
 
 <script>
+let isSubmitting=false;
 
-let selected=[];
+document.querySelectorAll('.group-box').forEach(box=>{
+let select = box.querySelector('.selectItem');
+let list   = box.querySelector('.selectedList');
 
-/* ================= FILTER TYPE ================= */
-document.getElementById('filterType').addEventListener('change',function(){
+box.querySelector('.btnAdd').onclick=function(){
 
-let type=this.value;
+let val = select.value;
+let text = select.options[select.selectedIndex].text;
 
-document.querySelectorAll('#assetSelect option').forEach(opt=>{
-
-if(!opt.value) return;
-
-if(!type || opt.dataset.type===type){
-opt.style.display='';
-}else{
-opt.style.display='none';
-}
-
-});
-
-});
-
-/* ================= ADD ================= */
-document.getElementById('btnAdd').onclick=function(){
-
-let select=document.getElementById('assetSelect');
-let val=select.value;
-let text=select.options[select.selectedIndex].text;
-
-if(!val) return Swal.fire('กรุณาเลือก');
+if(!val){ Swal.fire('กรุณาเลือกก่อน'); return; }
 
 if(select.options[select.selectedIndex].disabled){
-return Swal.fire('❌ อุปกรณ์ถูกใช้งาน');
+Swal.fire('❌ อุปกรณ์นี้ถูกใช้งานอยู่'); return;
 }
 
-if(selected.includes(val)){
-return Swal.fire('เลือกแล้ว');
+if(list.querySelector('[data-id="'+val+'"]')){
+Swal.fire('เลือกแล้ว'); return;
 }
 
-selected.push(val);
-render();
-
-};
-
-/* ================= RENDER ================= */
-function render(){
-
-let box=document.getElementById('preview');
-box.innerHTML='';
-
-let grouped={};
-
-selected.forEach(v=>{
-let opt=document.querySelector(`#assetSelect option[value="${v}"]`);
-let type=opt.dataset.type;
-
-if(!grouped[type]) grouped[type]=[];
-grouped[type].push(v);
-});
-
-for(let t in grouped){
-
-let div=document.createElement('div');
-div.innerHTML=`<b>${t}</b><br>`;
-
-grouped[t].forEach(v=>{
-let tag=document.createElement('span');
+let tag = document.createElement('div');
 tag.className='tag';
-tag.innerHTML=v+' ✖';
-tag.onclick=function(){
-selected=selected.filter(x=>x!=v);
-render();
+tag.dataset.id=val;
+tag.innerHTML=text+' ✖';
+tag.onclick=()=>tag.remove();
+
+list.appendChild(tag);
 };
-div.appendChild(tag);
 });
 
-box.appendChild(div);
-}
-
-}
-
-/* ================= SEND ================= */
 document.getElementById('btnSend').onclick=function(){
 
-let to=document.getElementById('toSite').value;
+if(isSubmitting) return;
 
-if(!to) return Swal.fire('เลือกโครงการ');
-if(selected.length==0) return Swal.fire('เลือกอุปกรณ์');
+let to = document.getElementById('toSite').value;
+if(!to){ Swal.fire('กรุณาเลือกโครงการ'); return; }
 
-let grouped={};
-
-selected.forEach(v=>{
-let opt=document.querySelector(`#assetSelect option[value="${v}"]`);
-let type=opt.dataset.type;
-
-if(!grouped[type]) grouped[type]=[];
-grouped[type].push(v);
+let items=[];
+document.querySelectorAll('.tag').forEach(t=>{
+items.push(t.dataset.id);
 });
 
-let html='';
-for(let t in grouped){
-html+=`<b>${t}</b>: ${grouped[t].join(', ')}<br>`;
+if(items.length==0){
+Swal.fire('กรุณาเลือกอุปกรณ์'); return;
 }
 
 Swal.fire({
-title:'ยืนยันส่งอุปกรณ์',
-html:`ส่งไป: <b>${to}</b><br><hr>${html}`,
+title:'ยืนยันส่ง?',
 icon:'question',
-showCancelButton:true,
-confirmButtonText:'ยืนยัน',
-cancelButtonText:'ยกเลิก'
+showCancelButton:true
 }).then(res=>{
 if(res.isConfirmed){
 
-let form=document.getElementById('formSend');
+isSubmitting=true;
 
-/* 🔥 inject hidden */
+let form=document.getElementById('formSend');
 form.querySelectorAll('input[name="asset_ids[]"]').forEach(e=>e.remove());
 
-selected.forEach(v=>{
+items.forEach(v=>{
 let i=document.createElement('input');
 i.type='hidden';
 i.name='asset_ids[]';
@@ -394,7 +334,6 @@ form.submit();
 });
 };
 
-/* ================= ERROR ================= */
 <?php if(isset($_GET['error']) && $_GET['error']=='used'): ?>
 Swal.fire({
 icon:'warning',
@@ -402,7 +341,6 @@ title:'อุปกรณ์ถูกใช้งาน',
 text:'<?= $_GET['pc'] ?> อยู่ที่ <?= $_GET['site'] ?>'
 });
 <?php endif; ?>
-
 </script>
 
 <?php include 'partials/footer.php'; ?>
