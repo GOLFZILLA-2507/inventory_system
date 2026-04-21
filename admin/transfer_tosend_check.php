@@ -139,7 +139,7 @@ if($_SERVER['REQUEST_METHOD']=='POST'){
             =============================== */
             $conn->prepare("
             UPDATE IT_assets
-            SET use_it = 'สำนักงานใหญ่'
+            SET use_it = NULL -- กลับเป็นคลัง
             WHERE no_pc = ?
             ")->execute([$code]);
         }
