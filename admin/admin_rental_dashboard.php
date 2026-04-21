@@ -348,8 +348,8 @@ color:white;
 <div class="kpi kpi-blue">
 <div>💰 อัตราค่าเช่าทั้งหมด</div>
 <h4><?= number_format($totalRevenue,2) ?></h4>
-<button class="btn btn-light btn-sm mt-1" data-bs-toggle="modal" data-bs-target="#revenueModal">
-📄 รายละเอียดรายเครื่อง
+<button class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#summaryModal">
+📊 สรุปรวมทั้งหมด
 </button>
 </div>
 </div>
@@ -542,18 +542,25 @@ foreach($data as $d){
 <div class="modal-dialog modal-xl">
 <div class="modal-content p-4">
 
-<h5 class="mb-3">💰 รายได้แยกตามประเภท (พร้อมวันเช่า)</h5>
+<h5 class="mb-3 fw-bold">
+💰 รายได้แยกตามประเภท (พร้อมวันเช่า)
+</h5>
+<hr>
 
-<?php foreach($revenueDetail as $type=>$items): ?>
+<?php foreach($revenueDetail as $type=>$items): 
+    $map = [];
+foreach($data as $d){
+    $map[$d['user_no_pc']] = $d;
+}?>
+    
 <div class="mb-4">
 
 <!-- 🔥 หัวประเภท -->
-<h6 class="text-primary">
-<?= $type ?> 
-(<?= count($items) ?> เครื่อง)
+<h6 class="fw-bold text-primary mt-3">
+<?= $type ?> (<?= count($items) ?> เครื่อง)
 </h6>
 
-<table class="table table-sm table-bordered text-center align-middle">
+<table class="table table-bordered table-hover text-center align-middle">
 <thead>
 <tr>
 <th>เครื่อง</th>
@@ -575,11 +582,6 @@ $totalNetType = 0;
 
 /* 🔥 ใช้ array เก็บช่วงเวลา (กันนับซ้ำ) */
 $uniquePeriod = [];
-$day = 0;
-$map = [];
-foreach($data as $d){
-    $map[$d['user_no_pc']] = $d;
-}
 
 foreach($items as $it):
 
@@ -589,19 +591,26 @@ foreach($items as $it):
     $discount = $row['discount'] ?? 0;
     $net = $row['net_price'] ?? 0;
     $grade = $row['device_grade'] ?? '-';
-
-    $totalDay += $day;
-    $totalPrice += $it['price'];
-    $totalDiscountType += $discount;
-    $totalNetType += $net;
 ?>
+<?php
+$grade = '-';
+foreach($data as $d){
+    if($d['user_no_pc'] == $it['pc']){
+        $grade = $d['device_grade'] ?: '-';
+        break;
+    }
+}
+?>
+
 <tr>
 <td><?= $it['pc'] ?></td>
 <td>
-<span class="badge 
-<?= $grade=='A'?'bg-success':($grade=='B'?'bg-warning':($grade=='C'?'bg-danger':'bg-dark')) ?>">
-<?= $grade ?>
-</span>
+    <span class="badge rounded-pill 
+    <?= $grade=='A'?'bg-success':
+    ($grade=='B'?'bg-warning text-dark':
+    ($grade=='C'?'bg-danger':'bg-dark')) ?>">
+    <?= $grade ?>
+    </span>
 </td>
 <td><?= $day ?></td>
 <td><?= number_format($it['price'],2) ?></td>
@@ -706,6 +715,92 @@ foreach($items as $it):
 <?php endforeach; ?>
 
 </table>
+<hr>
+
+<h5 class="mt-4">💰 รายได้แยกตามประเภท (พร้อมวันเช่า)</h5>
+
+<?php
+$map = [];
+foreach($data as $d){
+    $map[$d['user_no_pc']] = $d;
+}
+?>
+
+<?php foreach($revenueDetail as $type=>$items): ?>
+
+<h6 class="text-primary mt-3 fw-bold">
+<?= $type ?> (<?= count($items) ?> เครื่อง)
+</h6>
+
+<table class="table table-bordered table-hover text-center">
+<thead class="table-light">
+<tr>
+<th>เครื่อง</th>
+<th>เกรด</th>
+<th>วันเช่า</th>
+<th>ก่อนลด</th>
+<th>ส่วนลด</th>
+<th>สุทธิ</th>
+</tr>
+</thead>
+
+<tbody>
+
+<?php
+$totalDay = 0;
+$totalPrice = 0;
+$totalDiscountType = 0;
+$totalNetType = 0;
+
+foreach($items as $it):
+
+$row = $map[$it['pc']] ?? null;
+
+$day = $row['total_days'] ?? 0;
+$discount = $row['discount'] ?? 0;
+$net = $row['net_price'] ?? 0;
+$grade = $row['device_grade'] ?? '-';
+
+$totalDay += $day;
+$totalPrice += $it['price'];
+$totalDiscountType += $discount;
+$totalNetType += $net;
+?>
+
+<tr>
+<td><?= $it['pc'] ?></td>
+<td>
+<span class="badge rounded-pill 
+<?= $grade=='A'?'bg-success':
+($grade=='B'?'bg-warning text-dark':
+($grade=='C'?'bg-danger':'bg-dark')) ?>">
+<?= $grade ?>
+</span>
+</td>
+<td><?= $day ?></td>
+<td><?= number_format($it['price'],2) ?></td>
+<td class="text-danger"><?= number_format($discount,2) ?></td>
+<td class="text-success"><?= number_format($net,2) ?></td>
+</tr>
+
+<?php endforeach; ?>
+
+</tbody>
+
+<tfoot>
+<tr class="table-primary">
+<th>รวม</th>
+<th>-</th>
+<th><?= $totalDay ?> วัน</th>
+<th><?= number_format($totalPrice,2) ?></th>
+<th class="text-danger"><?= number_format($totalDiscountType,2) ?></th>
+<th class="text-success"><?= number_format($totalNetType,2) ?></th>
+</tr>
+</tfoot>
+
+</table>
+
+<?php endforeach; ?>
 
 </div>
 </div>
