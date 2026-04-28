@@ -40,7 +40,7 @@
 </a>
 
 <ul class="dropdown-menu">
-<li><a class="dropdown-item" href="admin_assign_userproject.php">🔄 กำหนดโครงการ</a></li>
+<li><a class="dropdown-item" href="admin_assign_userproject.php">🔄 กำหนดพนักงานให้กับโครงการ</a></li>
 <li><a class="dropdown-item" href="admin_rental_price_manage.php">💰 จัดการราคาเช่า</a></li>
 </ul>
 </li>
@@ -77,11 +77,9 @@
 <!-- 🔥 กลุ่ม 3: ส่งอุปกรณ์ -->
 <li class="nav-item dropdown">
 <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
-🆕 จัดการ
+🆕 ค้นหา
 </a>
 <ul class="dropdown-menu">
-
-<li><a class="dropdown-item" href="asset_device_PReview.php">📤 ตรวจเช็คอุปกรณ์</a></li>
 <li><a class="dropdown-item" href="asset_check.php">📦 ค้นหารหัสผู้ใช้</a></li>
 
 </ul>

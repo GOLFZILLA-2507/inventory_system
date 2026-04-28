@@ -187,12 +187,20 @@ include 'partials/sidebar.php';
 </div>
 </div>
 
-<!-- 🔥 ทั้งหมด -->
+<!-- 🔥 อุปกรณ์ทั้งหมด -->
 <div class="col-md-4">
 <div class="dashboard-card card-gray">
 <h5>💻 อุปกรณ์ทั้งหมด</h5>
 <h2><?= $total ?></h2>
 <a href="asset_all.php" class="btn btn-light btn-sm">ดูทั้งหมด</a>
+</div>
+</div>
+
+<div class="col-md-4">
+<div class="dashboard-card card-indigo">
+<h5>🚀 Device  Dashboard</h5>
+<h2>📥</h2>
+<a href="asset_device_PReview.php" class="btn btn-light btn-sm">ดูรายละเอียด</a>
 </div>
 </div>
 
@@ -236,7 +244,7 @@ include 'partials/sidebar.php';
 <div class="dashboard-card card-indigo">
 <h5>💰 ค่าเช่าอุปกรณ์</h5>
 <h2>📊</h2>
-<a href="admin_rental_dashboard.php" class="btn btn-light btn-sm">เข้าใช้งาน</a>
+<a href="admin_rental_dashboard.php" class="btn btn-light btn-sm">ดูรายละเอียด</a>
 </div>
 </div>
 

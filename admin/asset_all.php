@@ -32,10 +32,22 @@ if(isset($_POST['save'])){
     $how1 = $date1 ? date('Y') - date('Y', strtotime($date1)) : null;
     $how2 = $date2 ? date('Y') - date('Y', strtotime($date2)) : null;
 
-    if($how2 === null) $grade = null;
-    elseif($how2 < 6) $grade = 'A';
-    elseif($how2 <= 7) $grade = 'B';
-    else $grade = 'C';
+    //คำนวนเกรด
+        if($how2 === null){
+            $grade = null;
+        }
+        elseif($how2 >= 0 && $how2 <= 3){
+            $grade = 'A';
+        }
+        elseif($how2 >= 4 && $how2 <= 6){
+            $grade = 'B';
+        }
+        elseif($how2 >= 7 && $how2 <= 8){
+            $grade = 'C';
+        }
+        elseif($how2 > 8){
+            $grade = 'D';
+        }
 
     $stmt = $conn->prepare("
         UPDATE IT_assets SET
@@ -72,8 +84,19 @@ a.type_equipment,
 a.spec,a.ram,a.ssd,a.gpu,
 a.machine_value,
 a.yfm_1,a.How_long,
-a.yfm_2,a.How_long2,
-a.device_grade,
+a.yfm_2,
+
+/* 🔥 อายุแบบ realtime */
+DATEDIFF(YEAR, a.yfm_2, GETDATE()) AS How_long2,
+
+/* 🔥 เกรดแบบ realtime */
+CASE 
+    WHEN a.yfm_2 IS NULL THEN NULL
+    WHEN DATEDIFF(YEAR, a.yfm_2, GETDATE()) <= 3 THEN 'A'
+    WHEN DATEDIFF(YEAR, a.yfm_2, GETDATE()) <= 6 THEN 'B'
+    WHEN DATEDIFF(YEAR, a.yfm_2, GETDATE()) <= 8 THEN 'C'
+    ELSE 'D'
+END AS device_grade,
 
 /* 🔥 user */
 u.user_employee
@@ -122,8 +145,16 @@ if($status=='free'){
 
 /* 🔥 GRADE */
 if($grade){
-    $sql.=" AND a.device_grade=?";
-    $params[]=$grade;
+    $sql.=" AND (
+        CASE 
+            WHEN a.yfm_2 IS NULL THEN NULL
+            WHEN DATEDIFF(YEAR, a.yfm_2, GETDATE()) <= 3 THEN 'A'
+            WHEN DATEDIFF(YEAR, a.yfm_2, GETDATE()) <= 6 THEN 'B'
+            WHEN DATEDIFF(YEAR, a.yfm_2, GETDATE()) <= 8 THEN 'C'
+            ELSE 'D'
+        END
+    ) = ?";
+    $params[] = $grade;
 }
 
 /* 🔥 PAGINATION */
@@ -263,6 +294,7 @@ body{font-family:'Sarabun';font-size:14px;background:#eef6ff;}
 <option value="A">A</option>
 <option value="B">B</option>
 <option value="C">C</option>
+<option value="D">D</option>
 </select>
 </div>
 
@@ -305,7 +337,6 @@ body{font-family:'Sarabun';font-size:14px;background:#eef6ff;}
 <thead>
 <tr>
 <th>#</th>
-<th>ผู้ใช้</th>
 <th>โครงการ</th>
 <th>รหัส</th>
 <th>ประเภท</th>
@@ -329,12 +360,16 @@ foreach($data as $row):
 
 $spec = $row['spec']." | ".$row['ram']." | ".$row['ssd']." | ".$row['gpu'];
 
+// แสดงผลเกรด ตามอายุการใช้งาน
 $age = $row['How_long2'];
 
 $gradeDB = $row['device_grade'] ?? null; // 🔥 กัน undefined
 
-if(!$gradeDB){
-    $grade = "<span class='badge bg-secondary'>ยังไม่ประเมิน</span>";
+if($row['How_long2'] === null){
+    $grade = "<span class='badge bg-secondary'>ยังไม่ได้ประเมิน</span>";
+}
+elseif($row['How_long2'] == 0){
+    $grade = "<span class='badge bg-info'>A - ใหม่ (ยังไม่ถึง 1 ปี)</span>";
 }
 elseif($gradeDB == 'A'){
     $grade = "<span class='badge bg-success'>A - ใช้งานดี</span>";
@@ -342,20 +377,37 @@ elseif($gradeDB == 'A'){
 elseif($gradeDB == 'B'){
     $grade = "<span class='badge bg-warning text-dark'>B - พอใช้</span>";
 }
+elseif($gradeDB == 'C'){
+    $grade = "<span class='badge bg-danger'>C - ใกล้หมดสภาพ</span>";
+}
+elseif($gradeDB == 'D'){
+    $grade = "<span class='badge bg-dark'>D - ควรเปลี่ยน</span>";
+}
 else{
-    $grade = "<span class='badge bg-danger'>C - ควรเปลี่ยน</span>";
+    $grade = "<span class='badge bg-secondary'>ยังไม่ได้ประเมิน</span>";
 }
 ?>
 
 <tr>
 
 <td><?= $i++ ?></td>
-<td><?= $row['user_employee'] ?></td>
 <td><?= $row['project'] ?></td>
 <td><?= $row['no_pc'] ?></td>
 <td><?= $row['type_equipment'] ?></td>
 <td><?= $row['How_long'] ?> ปี</td>
-<td><?= $row['How_long2'] ?> ปี</td>
+<td>
+<?php
+if($row['How_long2'] === null){
+    echo '-';
+}
+elseif($row['How_long2'] == 0){
+    echo "<span class='text-primary fw-bold'>ยังไม่ถึง 1 ปี</span>";
+}
+else{
+    echo $row['How_long2']." ปี";
+}
+?>
+</td>
 <td><?= $grade ?></td>
 <?php if($role != 'MD'): ?>
 
@@ -444,9 +496,7 @@ value="<?= !empty($row['yfm_2']) ? substr($row['yfm_2'],0,7) : '' ?>">
 class="form-control"
 value="<?= $row['machine_value'] ?>">
 </div>
-
 </div>
-
 </div>
 
 <!-- ================= FOOTER ================= -->
