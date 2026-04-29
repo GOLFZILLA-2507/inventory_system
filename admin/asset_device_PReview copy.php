@@ -215,7 +215,7 @@ transform:scale(1.01);
 <th>แผนก</th>
 <th>PC</th>
 <th>Spec</th>
-<th>เกรด</th>
+<th>เกรดคอมพิวเตอร์</th>
 <th>อายุ</th>
 <th>Monitor</th>
 <th>UPS</th>

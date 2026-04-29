@@ -8,7 +8,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     try {
         // ตรวจสอบข้อมูลผู้ใช้งานในฐานข้อมูล
-        $stmt = $conn->prepare("SELECT EmployeeID, password, fullname, role_ivt, site, position, project_id FROM Employee WHERE EmployeeID = :EmployeeID AND active = 1");
+        $stmt = $conn->prepare("SELECT EmployeeID, password, fullname, role_ivt, site, position FROM vsathapat.dbo.Employee WHERE EmployeeID = :EmployeeID AND active = 1");
         $stmt->bindParam(':EmployeeID', $EmployeeID);
         $stmt->execute();
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -28,7 +28,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['role_ivt'] = $user['role_ivt'];
             $_SESSION['site'] = $user['site'];
             $_SESSION['position'] = $user['position'];
-            $_SESSION['project_id'] = $user['project_id'];
 
             // เปลี่ยนเส้นทางไปยังหน้า dashboard
             if($user['role_ivt']=='admin' || $user['role_ivt']=='MD'){ 

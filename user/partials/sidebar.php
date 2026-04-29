@@ -1,12 +1,7 @@
 <nav class="navbar navbar-expand-lg navbar-dark bg-success">
     <div class="container-fluid">
 
-<?php
-/* =====================================================
-   ตรวจสอบ role ของ user
-===================================================== */
-$role = $_SESSION['role_ivt'] ?? 'user';
-?>
+<?php $role = $_SESSION['role_ivt'] ?? 'user';?>
 
         <!-- LOGO -->
         <a class="navbar-brand" href="asset_shared_view.php">
@@ -71,7 +66,15 @@ $role = $_SESSION['role_ivt'] ?? 'user';
                         <li><a class="dropdown-item" href="transfer_receive.php">✔️ ตรวจรับอุปกรณ์</a></li>
                     </ul>
                 </li>
+<?php endif; ?>
 
+<?php if($role == 'pm'): ?>
+                <!-- ระบบเช่า -->
+                <li class="nav-item">
+                    <a class="nav-link" href="user_rental_dashboard.php">
+                        🏠 ค่าเช่าอุปกรณ์ทั้งหมดภายในโครงการ
+                    </a>
+                </li>
 <?php endif; ?>
 
             </ul>

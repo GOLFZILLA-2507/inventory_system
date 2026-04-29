@@ -139,7 +139,7 @@ body{
 
 .kpi-blue{background:linear-gradient(135deg,#2196f3,#00c6ff);}
 .kpi-green{background:linear-gradient(135deg,#00c853,#69f0ae);}
-.kpi-dark{background:linear-gradient(135deg,#37474f,#607d8b);}
+.kpi-teal{background:linear-gradient(135deg,#009688,#26a69a);}
 
 /* LAYOUT */
 .main{
@@ -211,7 +211,7 @@ body{
 </div>
 
 <div class="col-md-4">
-<div class="kpi kpi-dark">
+<div class="kpi kpi-teal">
 🖥 Monitor
 <h4><?= $totalMonitor ?></h4>
 </div>
@@ -271,6 +271,7 @@ body{
                         <th>ชื่อ</th>
                         <th>แผนก</th>
                         <th>PC</th>
+                        <th>Spec</th>
                         <th>Monitor1</th>
                         <th>Monitor2</th>
                         <th>UPS</th>
@@ -286,6 +287,7 @@ body{
                     <td><?= $name ?></td>
                     <td><?= $u['department'] ?></td>
                     <td><?= $u['PC'] ?: '-' ?></td>
+                    <td><?= $u['spec'] ?: '-' ?></td>
                     <td><?= $u['Monitor1'] ?: '-' ?></td>
                     <td><?= $u['Monitor2'] ?: '-' ?></td>
                     <td><?= $u['UPS'] ?: '-' ?></td>
@@ -358,19 +360,43 @@ window.location='?site='+site;
 
 /* FILTER */
 function filter(){
-let search = document.getElementById('search').value.toLowerCase();
-let dept = document.getElementById('filterDepartment').value.toLowerCase();
 
-document.querySelectorAll('#tableUser tbody tr').forEach(r=>{
-let name = r.children[1].innerText.toLowerCase();
-let d = r.children[2].innerText.toLowerCase();
+    let search = document.getElementById('search').value.toLowerCase();
+    let dept = document.getElementById('filterDepartment').value.toLowerCase();
 
-let show = true;
-if(search && !name.includes(search)) show=false;
-if(dept && d!==dept) show=false;
+    document.querySelectorAll('#tableUser tbody tr').forEach(r=>{
 
-r.style.display = show ? '' : 'none';
-});
+        // 🔥 ดึงค่าทุก column ที่ต้องการค้นหา
+        let name = r.children[1].innerText.toLowerCase();      // ชื่อ
+        let department = r.children[2].innerText.toLowerCase();// แผนก
+        let pc = r.children[3].innerText.toLowerCase();        // รหัส PC
+        let spec = r.children[4].innerText.toLowerCase();      // spec
+        let monitor1 = r.children[5].innerText.toLowerCase();  // monitor1
+        let monitor2 = r.children[6].innerText.toLowerCase();  // monitor2
+        let ups = r.children[7].innerText.toLowerCase();       // UPS
+
+        let show = true;
+
+        // 🔥 ค้นหาได้ทุก field
+        if(search && !(
+            name.includes(search) ||
+            pc.includes(search) ||
+            monitor1.includes(search) ||
+            monitor2.includes(search) ||
+            ups.includes(search) ||
+            spec.includes(search)
+        )){
+            show = false;
+        }
+
+        // 🔥 filter แผนก
+        if(dept && department !== dept){
+            show = false;
+        }
+
+        r.style.display = show ? '' : 'none';
+
+    });
 }
 
 function resetFilter(){
