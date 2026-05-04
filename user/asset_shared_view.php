@@ -3,313 +3,294 @@ require_once '../config/connect.php';
 require_once '../config/checklogin.php';
 
 $site = $_SESSION['site'];
+$search = $_GET['search'] ?? '';
+$grade_filter = $_GET['grade'] ?? '';
 
-/* =====================================================
-🔥 โหลดรายการที่โอนแล้ว (ใช้ filter)
-===================================================== */
-$stmtT = $conn->prepare("
-SELECT no_pc
-FROM IT_AssetTransfer_Headers
-WHERE from_site = ?
-AND receive_status = 'รับแล้ว'
-");
-$stmtT->execute([$site]);
-$transfered = array_map('trim',$stmtT->fetchAll(PDO::FETCH_COLUMN));
-
-/* =====================================================
-🔥 Dashboard
-===================================================== */
-
-// ไม่มีผู้ใช้
-$stmt1 = $conn->prepare("
-SELECT COUNT(*) 
-FROM IT_user_devices
-WHERE user_employee IS NULL
-AND user_project = ?
-");
-$stmt1->execute([$site]);
-$count_no_user = $stmt1->fetchColumn();
-
-// ส่งออก
-$stmt2 = $conn->prepare("
-SELECT COUNT(*) FROM IT_AssetTransfer_Headers
-WHERE from_site = ?
-");
-$stmt2->execute([$site]);
-$count_sent = $stmt2->fetchColumn();
-
-// รอตรวจรับ
-$stmt3 = $conn->prepare("
-SELECT COUNT(*) FROM IT_AssetTransfer_Headers
-WHERE to_site = ?
-AND receive_status = 'รอตรวจรับ'
-");
-$stmt3->execute([$site]);
-$count_receive = $stmt3->fetchColumn();
-
-// ซ่อม
-$stmt4 = $conn->prepare("
-SELECT COUNT(*) FROM IT_RepairTickets
-WHERE project = ?
-AND status != 'เสร็จแล้ว'
-");
-$stmt4->execute([$site]);
-$count_repair = $stmt4->fetchColumn();
-
-/* =====================================================
-🔥 โหลดข้อมูลจาก IT_user_devices (ตัวใหม่)
-===================================================== */
-$stmt = $conn->prepare("
-SELECT 
-    d.user_employee,
-    d.device_type,
-    d.device_role,
-    d.device_code,
-
-    a.spec,
-    a.ram,
-    a.ssd,
-    a.gpu,
-
-    e.position
-
-FROM IT_user_devices d
-
-LEFT JOIN IT_assets a 
-ON a.no_pc = d.device_code
-
-LEFT JOIN Employee e
-ON e.fullname = d.user_employee
-
-WHERE d.user_project = ?
-AND d.device_role != 'shared' /* ไม่เอาอุปกรณ์ใช้ร่วม */
-AND d.user_employee IS NOT NULL /* ไม่เอาอุปกรณ์ไม่มีผู้ใช้ */
-ORDER BY d.user_employee
-");
+/* KPI */
+$stmt = $conn->prepare("SELECT COUNT(*) FROM IT_user_devices WHERE user_employee IS NULL AND user_project = ?");
 $stmt->execute([$site]);
+$count_no_user = $stmt->fetchColumn();
+
+$stmt = $conn->prepare("SELECT COUNT(*) FROM IT_RepairTickets WHERE project = ? AND status != 'เสร็จแล้ว'");
+$stmt->execute([$site]);
+$count_repair = $stmt->fetchColumn();
+
+/* DATA */
+$sql = "
+SELECT d.user_employee,d.device_type,d.device_code,a.spec,a.ram,a.ssd,a.gpu,a.device_grade,a.How_long2,e.position FROM IT_user_devices d
+LEFT JOIN IT_assets a ON a.no_pc = d.device_code
+LEFT JOIN Employee e ON e.fullname = d.user_employee
+WHERE d.user_project = ?
+AND d.device_role != 'shared'
+AND d.user_employee IS NOT NULL
+";
+
+if($search){
+    $sql .= " AND (d.user_employee LIKE ? OR d.device_code LIKE ? OR d.device_type LIKE ?)";
+}
+
+if($grade_filter){
+    $sql .= " AND a.device_grade = ?";
+}
+
+$stmt = $conn->prepare($sql);
+
+if($search){
+    $stmt->execute([$site,"%$search%","%$search%","%$search%"]);
+}else{
+    $stmt->execute([$site, $grade_filter, $grade_filter]);
+}
+
 $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-/* =====================================================
-🔥 GROUP ข้อมูล (หัวใจหลัก)
-===================================================== */
-$data = [];
+/* GROUP */
+$data=[];
+$gradeCount=['A'=>0,'B'=>0,'C'=>0,'D'=>0];
 
 foreach($rows as $r){
-
     $emp = trim($r['user_employee']);
-    if($emp == '' || is_null($emp)) continue;
+    if(!$emp) continue;
 
     if(!isset($data[$emp])){
-        $data[$emp] = [
-            'position' => $r['position'],
-            'PC' => '',
-            'Monitor1' => '',
-            'Monitor2' => '',
-            'UPS' => '',
-            'spec' => ''
+        $data[$emp]=[
+            'position'=>$r['position'],
+            'PC'=>'','Monitor1'=>'','Monitor2'=>'','UPS'=>'',
+            'spec'=>'','grade'=>'-','How_long2'=>'-'
         ];
     }
 
-    /* ===============================
-    🔵 COMPUTER (PC / Notebook / AIO)
-    =============================== */
-    if(in_array($r['device_type'], ['PC','Notebook','All_In_One'])){
-
-        // 🔥 ถ้ามีหลายเครื่อง → เอาตัวแรก หรือจะ concat ก็ได้
-        if($data[$emp]['PC'] == ''){
-            $data[$emp]['PC'] = $r['device_code'];
-
-            if(!empty($r['spec'])){
-                $data[$emp]['spec'] =
-                    "{$r['spec']} | {$r['ram']} | {$r['ssd']} | {$r['gpu']}";
-            }
+    if(in_array($r['device_type'],['PC','Notebook','All_In_One'])){
+        if(!$data[$emp]['PC']){
+            $data[$emp]['PC']=$r['device_code'];
+            $data[$emp]['spec']=$r['spec']." | ".$r['ram']." | ".$r['ssd']." | ".$r['gpu'];
+            $data[$emp]['grade']=$r['device_grade'] ?: '-';
+            $data[$emp]['How_long2']=$r['How_long2'] ?: '-';
         }
     }
 
-    /* ===============================
-    🟡 Monitor
-    =============================== */
-    if($r['device_type'] == 'Monitor'){
-
-        if($data[$emp]['Monitor1'] == ''){
-            $data[$emp]['Monitor1'] = $r['device_code'];
-        }
-        elseif($data[$emp]['Monitor2'] == ''){
-            $data[$emp]['Monitor2'] = $r['device_code'];
-        }
+    if($r['device_type']=='Monitor'){
+        if(!$data[$emp]['Monitor1']) $data[$emp]['Monitor1']=$r['device_code'];
+        else $data[$emp]['Monitor2']=$r['device_code'];
     }
 
-    /* ===============================
-    🟣 UPS
-    =============================== */
-    if($r['device_type'] == 'UPS'){
+    if($r['device_type']=='UPS'){
+        $data[$emp]['UPS']=$r['device_code'];
+    }
 
-        if($data[$emp]['UPS'] == ''){
-            $data[$emp]['UPS'] = $r['device_code'];
-        }
+    if(isset($gradeCount[$r['device_grade']])){
+        $gradeCount[$r['device_grade']]++;
     }
 }
 
-/* =====================================================
-🔥 โหลด shared (ใช้ role = shared)
-===================================================== */
-$stmtS = $conn->prepare("
-SELECT device_type, device_code
-FROM IT_user_devices
-WHERE user_project=?
-AND device_role='shared'
-");
-$stmtS->execute([$site]);
-$sharedRows = $stmtS->fetchAll(PDO::FETCH_ASSOC);
+/* ================= DEVICE TYPE COUNT ================= */
+// 🔥 นับจำนวนอุปกรณ์แต่ละประเภท
+$typeCount = [];
+
+foreach($rows as $r){
+    $type = $r['device_type'] ?? 'อื่นๆ';
+
+    if(!isset($typeCount[$type])){
+        $typeCount[$type] = 0;
+    }
+
+    $typeCount[$type]++;
+}
 
 include 'partials/header.php';
 include 'partials/sidebar.php';
 ?>
 
 <style>
-.card-header{
-background:linear-gradient(135deg,#198754,#20c997);
-color:white;
+body{background:#eef4ff;font-family:'Sarabun';}
+
+/* KPI */
+.kpi{
+    padding:15px;
+    border-radius:12px;
+    text-align:center;
+    color:#fff;
+    font-weight:600;
+}
+.kpi-green{background:#198754;}
+.kpi-warning{background:#ffc107;color:#000;}
+.kpi-red{background:#dc3545;}
+.kpi-dark{background:#212529;}
+
+.card{
+    border:none;
+    border-radius:15px;
+    box-shadow:0 8px 25px rgba(0,0,0,0.08);
 }
 
-.empty-data{
-padding:4px 10px;
-font-size:12px;
-color:#856404;
-background:#fff3cd;
-border-radius:6px;
-border:1px solid #000;
+canvas{
+    max-height:260px;
 }
 </style>
 
 <div class="container mt-4">
 
-<div class="row mb-4">
+<div class="row g-3 mb-4">
 
-<div class="col-md-3">
-<a href="asset_available.php" class="text-decoration-none">
-<div class="card bg-danger text-white text-center shadow">
-<div class="card-body">
-<h6>🖥 อุปกรณ์ไม่มีผู้ใช้</h6>
-<h2><?= $count_no_user ?></h2>
-</div>
-</div>
-</a>
+    <!-- LEFT -->
+    <div class="col-md-8">
+
+        <div class="card p-3">
+
+            <h6 class="mb-3">📊 สถานะอุปกรณ์</h6>
+
+            <!-- grade -->
+            <div class="row g-3 mb-3">
+
+                <div class="col-md-3">
+                    <div class="kpi kpi-green">A<br><h4><?= $gradeCount['A'] ?></h4></div>
+                </div>
+
+                <div class="col-md-3">
+                    <div class="kpi kpi-warning">B<br><h4><?= $gradeCount['B'] ?></h4></div>
+                </div>
+
+                <div class="col-md-3">
+                    <div class="kpi kpi-red">C<br><h4><?= $gradeCount['C'] ?></h4></div>
+                </div>
+
+                <div class="col-md-3">
+                    <div class="kpi kpi-dark">D<br><h4><?= $gradeCount['D'] ?></h4></div>
+                </div>
+
+            </div>
+
+        <!-- 🔥 GRAPH DEVICE TYPE -->
+            <div class="mt-3">
+                <h6 class="mb-3">📊 ประเภทอุปกรณ์</h6>
+                <canvas id="deviceChart"></canvas>
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- RIGHT -->
+    <div class="col-md-4">
+
+        <div class="card p-3 h-100">
+
+            <h6 class="text-center">📊 สัดส่วนเกรดอุปกรณ์</h6>
+
+            <canvas id="gradeChart"></canvas>
+
+        </div>
+
+    </div>
+
 </div>
 
-<div class="col-md-3">
-<a href="transfer_list.php" class="text-decoration-none">
-<div class="card bg-primary text-white text-center shadow">
-<div class="card-body">
-<h6>📦 รายการโอนย้าย/ส่งคืน</h6>
-<h2><?= $count_sent ?></h2>
-</div>
-</div>
-</a>
-</div>
+<!-- TABLE -->
+<div class="card">
 
-<div class="col-md-3">
-<a href="transfer_receive.php" class="text-decoration-none">
-<div class="card bg-warning text-white text-center shadow">
-<div class="card-body">
-<h6>📥 รอตรวจรับ</h6>
-<h2><?= $count_receive ?></h2>
-</div>
-</div>
-</a>
-</div>
-
-<div class="col-md-3">
-<a href="repair_status.php" class="text-decoration-none">
-<div class="card bg-success text-white text-center shadow">
-<div class="card-body">
-<h6>🛠 แจ้งซ่อม</h6>
-<h2><?= $count_repair ?></h2>
-</div>
-</div>
-</a>
-</div>
-
-
-</div>
-
-<div class="card shadow">
-<div class="card-header">
+<div class="card-header bg-success text-white">
 📡 อุปกรณ์ในโครงการ <?= $site ?>
 </div>
 
+<form class="p-3 row g-2">
+
+<div class="col-md-4">
+<input name="search" class="form-control" placeholder="🔍 ค้นหา..." value="<?= $search ?>">
+</div>
+
+<div class="col-md-5">
+<select name="grade" class="form-control">
+<option value="">ทุกเกรด</option>
+<option value="A">A</option>
+<option value="B">B</option>
+<option value="C">C</option>
+<option value="D">D</option>
+</select>
+</div>
+
+<div class="col-md-3 d-flex gap-2">
+<button class="btn btn-success w-100">ค้นหา</button>
+<a href="asset_shared_view.php" class="btn btn-secondary w-100">ล้าง</a>
+</div>
+
+</form>
+
 <div class="card-body">
 
-<h6>👨‍💼 อุปกรณ์พนักงาน</h6>
-
 <table class="table table-bordered text-center">
+<thead>
 <tr>
 <th>#</th>
 <th>ชื่อ</th>
 <th>ตำแหน่ง</th>
 <th>PC</th>
+<th>อายุ</th>
+<th>เกรด</th>
 <th>Spec</th>
-<th>Monitor1</th>
-<th>Monitor2</th>
+<th>Monitor</th>
 <th>UPS</th>
 </tr>
+</thead>
 
-<?php
-$i=1;
-
-foreach($data as $name => $u){
-
-    if(in_array(trim($u['PC']),$transfered)) continue;
-
-    $spec = $u['spec'] ?: '<span class="empty-data">ไม่มีข้อมูล</span>';
-?>
-
+<tbody>
+<?php $i=1; foreach($data as $name=>$u): ?>
 <tr>
 <td><?= $i++ ?></td>
-<td class="text-start"><?= $name ?></td>
-<td><?= $u['position'] ?: '-' ?></td>
-<td><?= $u['PC'] ?: '-' ?></td>
-<td><?= $spec ?></td>
-<td><?= $u['Monitor1'] ?: '-' ?></td>
-<td><?= $u['Monitor2'] ?: '-' ?></td>
-<td><?= $u['UPS'] ?: '-' ?></td>
+<td><?= $name ?></td>
+<td><?= $u['position'] ?></td>
+<td><?= $u['PC'] ?></td>
+<td><?= $u['How_long2'] ?></td>
+<td>
+<span class="badge 
+<?= $u['grade']=='A'?'bg-success':
+($u['grade']=='B'?'bg-warning text-dark':
+($u['grade']=='C'?'bg-danger':'bg-secondary')) ?>">
+<?= $u['grade'] ?>
+</span>
+</td>
+
+<td><?= $u['spec'] ?></td>
+<td><?= $u['Monitor1'].' '.$u['Monitor2'] ?></td>
+<td><?= $u['UPS'] ?></td>
 </tr>
-
-<?php } ?>
-
-</table>
-
-<hr>
-
-<h6>📡 อุปกรณ์ใช้ร่วม</h6>
-
-<table class="table table-bordered text-center">
-<tr>
-<th>#</th>
-<th>ประเภท</th>
-<th>รหัส</th>
-</tr>
-
-<?php
-$j=1;
-
-foreach($sharedRows as $s){
-
-    if(in_array($s['device_code'],$transfered)) continue;
-?>
-
-<tr>
-<td><?= $j++ ?></td>
-<td><?= $s['device_type'] ?></td>
-<td><?= $s['device_code'] ?></td>
-</tr>
-
-<?php } ?>
-
+<?php endforeach; ?>
+</tbody>
 </table>
 
 </div>
 </div>
+
 </div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+new Chart(document.getElementById('gradeChart'), {
+type:'doughnut',
+data:{
+labels:['A','B','C','D'],
+datasets:[{
+data:[
+<?= $gradeCount['A'] ?>,
+<?= $gradeCount['B'] ?>,
+<?= $gradeCount['C'] ?>,
+<?= $gradeCount['D'] ?>
+],
+backgroundColor:['#198754','#ffc107','#dc3545','#212529']
+}]
+}
+});
+
+// 🔥 กราฟประเภทอุปกรณ์
+new Chart(document.getElementById('deviceChart'), {
+    type:'bar',
+    data:{
+        labels: <?= json_encode(array_keys($typeCount)) ?>,
+        datasets:[{
+            label:'จำนวนอุปกรณ์',
+            data: <?= json_encode(array_values($typeCount)) ?>
+        }]
+    }
+});
+</script>
 
 <?php include 'partials/footer.php'; ?>

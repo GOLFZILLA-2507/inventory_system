@@ -25,7 +25,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // เก็บข้อมูลผู้ใช้งานใน session
             $_SESSION['EmployeeID'] = $user['EmployeeID'];
             $_SESSION['fullname'] = $user['fullname'];
-            $_SESSION['role_ivt'] = $user['role_ivt'];
+            $_SESSION['role_ivt'] = strtolower(trim($user['role_ivt']));
             $_SESSION['site'] = $user['site'];
             $_SESSION['position'] = $user['position'];
 
